@@ -147,7 +147,33 @@ You can look at the self-attention of the [CLS] token on the different heads of 
 python visualize_attention.py
 ```
 
-Also, check out [this colab](https://gist.github.com/aquadzn/32ac53aa6e485e7c3e09b1a0914f7422) for video inference.
+## Self-attention video generation
+You can generate videos like the one on the blog post with `video_generation.py`.
+
+Extract frames from input video and generate attention video:
+```
+python video_generation.py --input_path ../video.mp4 \
+    --output_dir ../output/ \
+    --resize 256 \
+```
+
+Use folder of frames already extracted and attention video:
+```
+python video_generation.py --input_path ../frames/ \
+    --output_dir ../output/ \
+    --resize 720 1280 \
+    --video_format avi
+```
+
+Only generate video from folder of attention maps images:
+```
+python video_generation.py --output_dir ../output/ \
+    --resize 256 \
+    --fps 60 \
+    --video_only
+```
+
+Also, check out [this colab](https://gist.github.com/aquadzn/32ac53aa6e485e7c3e09b1a0914f7422) for a video inference notebook.
 
 <div align="center">
   <img width="100%" alt="Self-attention from a Vision Transformer with 8x8 patches trained with DINO" src=".github/attention_maps.png">
