@@ -78,11 +78,11 @@ You can choose to download only the weights of the pretrained backbone used for 
 The pretrained models are available on PyTorch Hub.
 ```python
 import torch
-deits16 = torch.hub.load('facebookresearch/dino', 'dino_deits16')
-deits8 = torch.hub.load('facebookresearch/dino', 'dino_deits8')
-vitb16 = torch.hub.load('facebookresearch/dino', 'dino_vitb16')
-vitb8 = torch.hub.load('facebookresearch/dino', 'dino_vitb8')
-resnet50 = torch.hub.load('facebookresearch/dino', 'dino_resnet50')
+deits16 = torch.hub.load('facebookresearch/dino:main', 'dino_deits16')
+deits8 = torch.hub.load('facebookresearch/dino:main', 'dino_deits8')
+vitb16 = torch.hub.load('facebookresearch/dino:main', 'dino_vitb16')
+vitb8 = torch.hub.load('facebookresearch/dino:main', 'dino_vitb8')
+resnet50 = torch.hub.load('facebookresearch/dino:main', 'dino_resnet50')
 ```
 
 ## Training
