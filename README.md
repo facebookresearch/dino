@@ -133,7 +133,7 @@ python run_with_submitit.py --arch deit_small --epochs 300 --teacher_temp 0.07 -
 
 </details>
 
-The resulting pretrained model should reach 73.3% on k-NN eval and ~76.1% on linear eval. Training time is 2.6 days with 16 GPUs. We provide [training](https://dl.fbaipublicfiles.com/dino/example_runs_logs/dino_vanilla_deitsmall16_log.txt) and [linear evaluation](/to/do) logs for this run to help reproducibility.
+The resulting pretrained model should reach 73.3% on k-NN eval and ~76.1% on linear eval. Training time is 2.6 days with 16 GPUs. We provide [training](https://dl.fbaipublicfiles.com/dino/example_runs_logs/dino_boost_deitsmall16_log.txt) and [linear evaluation](/to/do) logs for this run to help reproducibility.
 
 ### ResNet-50 and other convnets trainings
 This code also works for training DINO on convolutional networks, like ResNet-50 for example. We highly recommend to adapt some optimization arguments in this case. For example following is a command to train DINO on ResNet-50 on a single node with 8 GPUs for 100 epochs. We provide [training](https://dl.fbaipublicfiles.com/dino/example_runs_logs/dino_rn50_log.txt) logs for this run.
