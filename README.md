@@ -94,7 +94,7 @@ python main_dino.py --help
 ```
 
 ### Vanilla DINO training :sauropod:
-Run DINO with DeiT-small network on a single node with 8 GPUs for 100 epochs with the following command. Training time is 1.75 day and the resulting checkpoint should reach ~69.3% on k-NN eval and ~73.8% on linear eval. We will shortly provide [training](/to/do) and [linear evaluation](/to/do) logs for this run to help reproducibility.
+Run DINO with DeiT-small network on a single node with 8 GPUs for 100 epochs with the following command. Training time is 1.75 day and the resulting checkpoint should reach 69.3% on k-NN eval and ~73.8% on linear eval. We provide [training](https://dl.fbaipublicfiles.com/dino/example_runs_logs/dino_vanilla_deitsmall16_log.txt) and [linear evaluation](/to/do) logs for this run to help reproducibility.
 ```
 python -m torch.distributed.launch --nproc_per_node=8 main_dino.py --arch deit_small --data_path /path/to/imagenet/train --output_dir /path/to/saving_dir
 ```
@@ -133,13 +133,26 @@ python run_with_submitit.py --arch deit_small --epochs 300 --teacher_temp 0.07 -
 
 </details>
 
-The resulting pretrained model should reach ~73.4% on k-NN eval and ~76.1% on linear eval. Training time is 2.6 days with 16 GPUs. We will shortly provide [training](/to/do) and [linear evaluation](/to/do) logs for this run to help reproducibility.
+The resulting pretrained model should reach 73.3% on k-NN eval and ~76.1% on linear eval. Training time is 2.6 days with 16 GPUs. We provide [training](https://dl.fbaipublicfiles.com/dino/example_runs_logs/dino_vanilla_deitsmall16_log.txt) and [linear evaluation](/to/do) logs for this run to help reproducibility.
 
 ### ResNet-50 and other convnets trainings
-This code also works for training DINO on convolutional networks, like ResNet-50 for example. We highly recommend to adapt some optimization arguments in this case. For example here is a command to train DINO on ResNet-50 on a single node with 8 GPUs for 100 epochs:
+This code also works for training DINO on convolutional networks, like ResNet-50 for example. We highly recommend to adapt some optimization arguments in this case. For example following is a command to train DINO on ResNet-50 on a single node with 8 GPUs for 100 epochs. We provide [training](https://dl.fbaipublicfiles.com/dino/example_runs_logs/dino_rn50_log.txt) logs for this run.
 ```
 python -m torch.distributed.launch --nproc_per_node=8 main_dino.py --arch resnet50 --optimizer sgd --weight_decay 1e-4 --weight_decay_end 1e-4 --global_crops_scale 0.14 1 --local_crops_scale 0.05 0.14 --data_path /path/to/imagenet/train --output_dir /path/to/saving_dir
 ```
+
+## Self-attention visualization
+You can look at the self-attention of the [CLS] token on the different heads of the last layer by running:
+```
+python visualize_attention.py
+```
+
+Also, check out [this colab](https://gist.github.com/aquadzn/32ac53aa6e485e7c3e09b1a0914f7422) for video inference.
+
+<div align="center">
+  <img width="100%" alt="Self-attention from a Vision Transformer with 8x8 patches trained with DINO" src=".github/attention_maps.png">
+</div>
+
 
 ## Evaluation: k-NN classification on ImageNet
 To evaluate a simple k-NN classifier with a single GPU on a pre-trained model, run:
@@ -156,15 +169,6 @@ To train a supervised linear classifier on frozen weights on a single node with 
 ```
 python -m torch.distributed.launch --nproc_per_node=8 eval_linear.py --data_path /path/to/imagenet
 ```
-
-## Self-attention visualization
-You can look at the self-attention of the [CLS] token on the different heads of the last layer by running:
-```
-python visualize_attention.py
-```
-<div align="center">
-  <img width="100%" alt="Self-attention from a Vision Transformer with 8x8 patches trained with DINO" src=".github/attention_maps.png">
-</div>
 
 ## License
 See the [LICENSE](LICENSE) file for more details.
