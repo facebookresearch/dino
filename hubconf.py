@@ -7,7 +7,7 @@ import vision_transformer as vits
 dependencies = ["torch", "torchvision"]
 
 
-def dino_deits16(pretrained=True, **kwargs):
+def dino_deits16(pretrained, **kwargs):
     """
     DeiT-Small/16x16 pre-trained with DINO.
     Achieves 74.5% top-1 accuracy on ImageNet with k-NN classification.
