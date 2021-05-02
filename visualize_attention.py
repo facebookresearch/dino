@@ -98,12 +98,13 @@ if __name__ == '__main__':
         obtained by thresholding the self-attention maps to keep xx% of the mass.""")
     args = parser.parse_args()
 
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     # build model
     model = vits.__dict__[args.arch](patch_size=args.patch_size, num_classes=0)
     for p in model.parameters():
         p.requires_grad = False
     model.eval()
-    model.cuda()
+    model.to(device)
     if os.path.isfile(args.pretrained_weights):
         state_dict = torch.load(args.pretrained_weights, map_location="cpu")
         if args.checkpoint_key is not None and args.checkpoint_key in state_dict:
@@ -158,7 +159,7 @@ if __name__ == '__main__':
     w_featmap = img.shape[-2] // args.patch_size
     h_featmap = img.shape[-1] // args.patch_size
 
-    attentions = model.forward_selfattention(img.cuda())
+    attentions = model.forward_selfattention(img.to(device))
 
     nh = attentions.shape[1] # number of head
 
