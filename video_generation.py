@@ -19,8 +19,10 @@ import vision_transformer as vits
 
 
 def extract_frames_from_video():
-    print("Extracting frames from", args.input_path)
     vidcap = cv2.VideoCapture(args.input_path)
+    args.fps = vidcap.get(cv2.CAP_PROP_FPS)
+    print(f"Video: {args.input_path} ({args.fps} fps)")
+    print("Extracting frames...")
     success, image = vidcap.read()
     count = 0
     while success:
@@ -33,7 +35,7 @@ def generate_video_from_images(format="mp4"):
     print("Generating video...")
     img_array = []
     # Change format to png if needed
-    for filename in tqdm(sorted(glob.glob(os.path.join(args.output_dir, "*.jpg")))):
+    for filename in tqdm(sorted(glob.glob(os.path.join(args.output_dir, "attn-*.jpg")))):
         with open(filename, "rb") as f:
             img = Image.open(f)
             img = img.convert("RGB")
@@ -247,7 +249,7 @@ def parse_args():
         "--fps",
         default=30.0,
         type=float,
-        help="FPS of input / output video. Default: 30",
+        help="FPS of input / output video. Automatically set if you extract frames from a video.",
     )
     parser.add_argument(
         "--video_only",
