@@ -200,7 +200,7 @@ python -m torch.distributed.launch --nproc_per_node=8 eval_linear.py --data_path
 ```
 
 ## License
-See the [LICENSE](LICENSE) file for more details.
+This repository is released under the Apache 2.0 license as found in the [LICENSE](LICENSE) file.
 
 ## Citation
 If you find this repository useful, please consider giving a star :star: and citation :t-rex::
