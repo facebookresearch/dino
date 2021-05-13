@@ -83,9 +83,9 @@ def dino_resnet50(pretrained=True, **kwargs):
     """
     ResNet-50 pre-trained with DINO.
     Achieves 75.3% top-1 accuracy on ImageNet linear evaluation benchmark (requires to train `fc`).
-    Note that `fc.weight` and `fc.bias` are randomly initialized.
     """
     model = resnet50(pretrained=False, **kwargs)
+    model.fc = torch.nn.Identity()
     if pretrained:
         state_dict = torch.hub.load_state_dict_from_url(
             url="https://dl.fbaipublicfiles.com/dino/dino_resnet50_pretrain/dino_resnet50_pretrain.pth",
