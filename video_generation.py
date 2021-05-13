@@ -187,7 +187,7 @@ class VideoGenerator:
             w_featmap = img.shape[-2] // self.args.patch_size
             h_featmap = img.shape[-1] // self.args.patch_size
 
-            attentions = self.model.forward_selfattention(img.to(DEVICE))
+            attentions = self.model.get_last_selfattention(img.to(DEVICE))
 
             nh = attentions.shape[1]  # number of head
 

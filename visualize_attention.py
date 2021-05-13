@@ -171,7 +171,7 @@ if __name__ == '__main__':
     w_featmap = img.shape[-2] // args.patch_size
     h_featmap = img.shape[-1] // args.patch_size
 
-    attentions = model.forward_selfattention(img.to(device))
+    attentions = model.get_last_selfattention(img.to(device))
 
     nh = attentions.shape[1] # number of head
 

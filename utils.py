@@ -565,11 +565,13 @@ class MultiCropWrapper(nn.Module):
     The inputs corresponding to a single resolution are clubbed and single
     forward is run on the same resolution inputs. Hence we do several
     forward passes = number of different resolutions used. We then
-    concatenate all the output features.
+    concatenate all the output features and run the head forward on these
+    concatenated features.
     """
     def __init__(self, backbone, head):
         super(MultiCropWrapper, self).__init__()
-        backbone.fc = nn.Identity()
+        # disable layers dedicated to ImageNet labels classification
+        backbone.fc, backbone.head = nn.Identity(), nn.Identity()
         self.backbone = backbone
         self.head = head
 

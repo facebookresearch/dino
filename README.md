@@ -147,6 +147,10 @@ You can look at the self-attention of the [CLS] token on the different heads of 
 python visualize_attention.py
 ```
 
+<div align="center">
+  <img width="100%" alt="Self-attention from a Vision Transformer with 8x8 patches trained with DINO" src=".github/attention_maps.png">
+</div>
+
 ## Self-attention video generation
 You can generate videos like the one on the blog post with `video_generation.py`.
 
@@ -178,10 +182,6 @@ python video_generation.py --input_path output/attention \
 
 Also, check out [this colab](https://gist.github.com/aquadzn/32ac53aa6e485e7c3e09b1a0914f7422) for a video inference notebook.
 
-<div align="center">
-  <img width="100%" alt="Self-attention from a Vision Transformer with 8x8 patches trained with DINO" src=".github/attention_maps.png">
-</div>
-
 
 ## Evaluation: k-NN classification on ImageNet
 To evaluate a simple k-NN classifier with a single GPU on a pre-trained model, run:
@@ -197,6 +197,25 @@ python -m torch.distributed.launch --nproc_per_node=1 eval_knn.py --pretrained_w
 To train a supervised linear classifier on frozen weights on a single node with 8 gpus, run:
 ```
 python -m torch.distributed.launch --nproc_per_node=8 eval_linear.py --data_path /path/to/imagenet
+```
+
+## Evaluation: DAVIS 2017 Video object segmentation
+**Step 1: Prepare DAVIS 2017 data**  
+```
+cd $HOME
+git clone https://github.com/davisvideochallenge/davis-2017 && cd davis-2017
+./data/get_davis.sh
+```
+
+**Step 2: Video object segmentation**  
+```
+python eval_video_segmentation.py --data_path $HOME/davis-2017/DAVIS/ --output_dir /path/to/saving_dir
+```
+
+**Step 3: Evaluate the obtained segmentation**  
+```
+git clone https://github.com/davisvideochallenge/davis2017-evaluation $HOME/davis2017-evaluation
+python $HOME/davis2017-evaluation/evaluation_method.py --task semi-supervised --results_path /path/to/saving_dir --davis_path $HOME/davis-2017/DAVIS/
 ```
 
 ## License

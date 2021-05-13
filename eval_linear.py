@@ -139,7 +139,11 @@ def train(model, linear_classifier, optimizer, loader, epoch, n, avgpool):
 
         # forward
         with torch.no_grad():
-            output = model.forward_return_n_last_blocks(inp, n, avgpool)
+            intermediate_output = model.get_intermediate_layers(inp, n)
+            output = [x[:, 0] for x in intermediate_output]
+            if avgpool:
+                output.append(torch.mean(intermediate_output[-1][:, 1:], dim=1))
+            output = torch.cat(output, dim=-1)
         output = linear_classifier(output)
 
         # compute cross entropy loss
@@ -172,8 +176,13 @@ def validate_network(val_loader, model, linear_classifier, n, avgpool):
         inp = inp.cuda(non_blocking=True)
         target = target.cuda(non_blocking=True)
 
-        # compute output
-        output = model.forward_return_n_last_blocks(inp, n, avgpool)
+        # forward
+        with torch.no_grad():
+            intermediate_output = model.get_intermediate_layers(inp, n)
+            output = [x[:, 0] for x in intermediate_output]
+            if avgpool:
+                output.append(torch.mean(intermediate_output[-1][:, 1:], dim=1))
+            output = torch.cat(output, dim=-1)
         output = linear_classifier(output)
         loss = nn.CrossEntropyLoss()(output, target)
 
