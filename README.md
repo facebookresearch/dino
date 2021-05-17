@@ -205,6 +205,8 @@ python -m torch.distributed.launch --nproc_per_node=8 eval_linear.py --data_path
 ```
 
 ## Evaluation: DAVIS 2017 Video object segmentation
+Please verify that you're using pytorch version 1.7.1 since we are not able to reproduce the results with most recent pytorch 1.8.1 at the moment.
+
 **Step 1: Prepare DAVIS 2017 data**  
 ```
 cd $HOME
