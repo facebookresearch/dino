@@ -26,6 +26,7 @@ from tqdm import tqdm
 import cv2
 import torch
 import torch.nn as nn
+from torch.nn import functional as F
 from PIL import Image
 from torchvision import transforms
 
@@ -46,6 +47,8 @@ def eval_video_tracking_davis(args, model, frame_list, video_dir, first_seg, seg
 
     # first frame
     frame1, ori_h, ori_w = read_frame(frame_list[0])
+    # extract first frame feature
+    frame1_feat = extract_feature(model, frame1).T #  dim x h*w
 
     # saving first segmentation
     out_path = os.path.join(video_folder, "00000.png")
@@ -55,20 +58,20 @@ def eval_video_tracking_davis(args, model, frame_list, video_dir, first_seg, seg
         frame_tar = read_frame(frame_list[cnt])[0]
 
         # we use the first segmentation and the n previous ones
-        used_frames = [frame1] + [pair[0] for pair in list(que.queue)]
+        used_frame_feats = [frame1_feat] + [pair[0] for pair in list(que.queue)]
         used_segs = [first_seg] + [pair[1] for pair in list(que.queue)]
 
-        frame_tar_avg, mask_neighborhood = label_propagation(args, model, frame_tar, used_frames, used_segs, mask_neighborhood)
+        frame_tar_avg, feat_tar, mask_neighborhood = label_propagation(args, model, frame_tar, used_frame_feats, used_segs, mask_neighborhood)
 
         # pop out oldest frame if neccessary
         if que.qsize() == args.n_last_frames:
             que.get()
         # push current results into queue
         seg = copy.deepcopy(frame_tar_avg)
-        que.put([frame_tar, seg])
+        que.put([feat_tar, seg])
 
         # upsampling & argmax
-        frame_tar_avg = torch.nn.functional.interpolate(frame_tar_avg, scale_factor=args.patch_size, mode='bilinear')[0]
+        frame_tar_avg = F.interpolate(frame_tar_avg, scale_factor=args.patch_size, mode='bilinear', align_corners=False, recompute_scale_factor=False)[0]
         frame_tar_avg = norm_mask(frame_tar_avg)
         _, frame_tar_seg = torch.max(frame_tar_avg, dim=0)
 
@@ -107,37 +110,20 @@ def norm_mask(mask):
     return mask
 
 
-def label_propagation(args, model, frame_tar, list_frames, list_segs, mask_neighborhood=None):
+def label_propagation(args, model, frame_tar, list_frame_feats, list_segs, mask_neighborhood=None):
     """
     propagate segs of frames in list_frames to frame_tar
     """
-    # get feature maps
-    input_frames = torch.stack([frame_tar] + list_frames)
-    curr_i = 0
-    _, w0, h0 = frame_tar.shape
-    while curr_i < input_frames.shape[0]:
-        inp = input_frames[curr_i: curr_i + args.bs].cuda()
-        out = model.get_intermediate_layers(inp, n=1)[0]
-        out = out[:, 1:, :]  # we discard the [CLS] token
-        w, h = int(w0 / model.patch_embed.patch_size), int(h0 / model.patch_embed.patch_size)
-        dim = out.shape[-1]
-        out = out.reshape(out.shape[0], w, h, dim)
-        out = out.permute(0, 3, 1, 2)
+    ## we only need to extract feature of the target frame
+    feat_tar, h, w = extract_feature(model, frame_tar, return_h_w=True)
 
-        if curr_i == 0:
-            feature_maps = out
-        else:
-            feature_maps = torch.cat((feature_maps, out))
-        curr_i += args.bs
-        del out  # free memory
+    return_feat_tar = feat_tar.T # dim x h*w
 
-    feat_tar = feature_maps[0].reshape(feature_maps.shape[1], -1).T # h*w x dim
+    ncontext = len(list_frame_feats)
+    feat_sources = torch.stack(list_frame_feats) # nmb_context x dim x h*w
 
-    ncontext = feature_maps.shape[0] - 1
-    feat_sources = feature_maps[1:].reshape(ncontext, dim, -1) # nmb_context x dim x h*w
-
-    feat_tar = nn.functional.normalize(feat_tar, dim=1, p=2)
-    feat_sources = nn.functional.normalize(feat_sources, dim=1, p=2)
+    feat_tar = F.normalize(feat_tar, dim=1, p=2)
+    feat_sources = F.normalize(feat_sources, dim=1, p=2)
 
     feat_tar = feat_tar.unsqueeze(0).repeat(ncontext, 1, 1)
     aff = torch.exp(torch.bmm(feat_tar, feat_sources) / 0.1) # nmb_context x h*w (tar: query) x h*w (source: keys)
@@ -157,12 +143,25 @@ def label_propagation(args, model, frame_tar, list_frames, list_segs, mask_neigh
 
     list_segs = [s.cuda() for s in list_segs]
     segs = torch.cat(list_segs)
-    nmb_context, C, w, h = segs.shape
+    nmb_context, C, h, w = segs.shape
     segs = segs.reshape(nmb_context, C, -1).transpose(2, 1).reshape(-1, C).T # C x nmb_context*h*w
     seg_tar = torch.mm(segs, aff)
-    seg_tar = seg_tar.reshape(1, C, w, h)
-    return seg_tar, mask_neighborhood
+    seg_tar = seg_tar.reshape(1, C, h, w)
+    return seg_tar, return_feat_tar, mask_neighborhood
  
+
+def extract_feature(model, frame, return_h_w=False):
+    """Extract one frame feature everytime."""
+    out = model.get_intermediate_layers(frame.unsqueeze(0).cuda(), n=1)[0]
+    out = out[:, 1:, :]  # we discard the [CLS] token
+    h, w = int(frame.shape[1] / model.patch_embed.patch_size), int(frame.shape[2] / model.patch_embed.patch_size)
+    dim = out.shape[-1]
+    out = out[0].reshape(h, w, dim)
+    out = out.reshape(-1, dim)
+    if return_h_w:
+        return out, h, w
+    return out
+
 
 def imwrite_indexed(filename, array, color_palette):
     """ Save indexed png for DAVIS."""
@@ -237,10 +236,9 @@ def read_seg(seg_dir, factor, scale_size=[480]):
     else:
         tw = scale_size[1]
         th = scale_size[0]
-    seg = np.asarray(seg).reshape((w, h))
-    small_seg = np.array(Image.fromarray(seg).resize((th // factor, tw // factor), 0))
+    small_seg = np.array(seg.resize((th // factor, tw // factor), 0))
     small_seg = torch.from_numpy(small_seg.copy()).contiguous().float().unsqueeze(0)
-    return to_one_hot(small_seg), seg
+    return to_one_hot(small_seg), np.asarray(seg)
 
 
 def color_normalize(x, mean=[0.485, 0.456, 0.406], std=[0.228, 0.224, 0.225]):
