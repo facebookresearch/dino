@@ -130,7 +130,7 @@ def label_propagation(args, model, frame_tar, list_frame_feats, list_segs, mask_
 
     if args.size_mask_neighborhood > 0:
         if mask_neighborhood is None:
-            mask_neighborhood = restrict_neighborhood(w, h)
+            mask_neighborhood = restrict_neighborhood(h, w)
             mask_neighborhood = mask_neighborhood.unsqueeze(0).repeat(ncontext, 1, 1)
         aff *= mask_neighborhood
 
@@ -223,20 +223,20 @@ def read_frame(frame_dir, scale_size=[480]):
 
 def read_seg(seg_dir, factor, scale_size=[480]):
     seg = Image.open(seg_dir)
-    h, w = seg.size
+    _w, _h = seg.size # note PIL.Image.Image's size is (w, h)
     if len(scale_size) == 1:
-        if(h > w):
-            tw = scale_size[0]
-            th = (tw * h) / w
-            th = int((th // 64) * 64)
+        if(_w > _h):
+            _th = scale_size[0]
+            _tw = (_th * _w) / _h
+            _tw = int((_tw // 64) * 64)
         else:
-            th = scale_size[0]
-            tw = (th * w) / h
-            tw = int((tw // 64) * 64)
+            _tw = scale_size[0]
+            _th = (_tw * _h) / _w
+            _th = int((_th // 64) * 64)
     else:
-        tw = scale_size[1]
-        th = scale_size[0]
-    small_seg = np.array(seg.resize((th // factor, tw // factor), 0))
+        _th = scale_size[1]
+        _tw = scale_size[0]
+    small_seg = np.array(seg.resize((_tw // factor, _th // factor), 0))
     small_seg = torch.from_numpy(small_seg.copy()).contiguous().float().unsqueeze(0)
     return to_one_hot(small_seg), np.asarray(seg)
 
