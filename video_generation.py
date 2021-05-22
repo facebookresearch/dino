@@ -269,9 +269,9 @@ class VideoGenerator:
                 "Please use the `--pretrained_weights` argument to indicate the path of the checkpoint to evaluate."
             )
             url = None
-            if self.args.arch == "deit_small" and self.args.patch_size == 16:
+            if self.args.arch == "vit_small" and self.args.patch_size == 16:
                 url = "dino_deitsmall16_pretrain/dino_deitsmall16_pretrain.pth"
-            elif self.args.arch == "deit_small" and self.args.patch_size == 8:
+            elif self.args.arch == "vit_small" and self.args.patch_size == 8:
                 url = "dino_deitsmall8_300ep_pretrain/dino_deitsmall8_300ep_pretrain.pth"  # model used for visualizations in our paper
             elif self.args.arch == "vit_base" and self.args.patch_size == 16:
                 url = "dino_vitbase16_pretrain/dino_vitbase16_pretrain.pth"
@@ -296,9 +296,9 @@ def parse_args():
     parser = argparse.ArgumentParser("Generation self-attention video")
     parser.add_argument(
         "--arch",
-        default="deit_small",
+        default="vit_small",
         type=str,
-        choices=["deit_tiny", "deit_small", "vit_base"],
+        choices=["vit_tiny", "vit_small", "vit_base"],
         help="Architecture (support only ViT atm).",
     )
     parser.add_argument(

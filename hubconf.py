@@ -19,12 +19,12 @@ import vision_transformer as vits
 dependencies = ["torch", "torchvision"]
 
 
-def dino_deits16(pretrained=True, **kwargs):
+def dino_vits16(pretrained=True, **kwargs):
     """
-    DeiT-Small/16x16 pre-trained with DINO.
+    ViT-Small/16x16 pre-trained with DINO.
     Achieves 74.5% top-1 accuracy on ImageNet with k-NN classification.
     """
-    model = vits.__dict__["deit_small"](patch_size=16, num_classes=0, **kwargs)
+    model = vits.__dict__["vit_small"](patch_size=16, num_classes=0, **kwargs)
     if pretrained:
         state_dict = torch.hub.load_state_dict_from_url(
             url="https://dl.fbaipublicfiles.com/dino/dino_deitsmall16_pretrain/dino_deitsmall16_pretrain.pth",
@@ -34,12 +34,12 @@ def dino_deits16(pretrained=True, **kwargs):
     return model
 
 
-def dino_deits8(pretrained=True, **kwargs):
+def dino_vits8(pretrained=True, **kwargs):
     """
-    DeiT-Small/8x8 pre-trained with DINO.
+    ViT-Small/8x8 pre-trained with DINO.
     Achieves 78.3% top-1 accuracy on ImageNet with k-NN classification.
     """
-    model = vits.__dict__["deit_small"](patch_size=8, num_classes=0, **kwargs)
+    model = vits.__dict__["vit_small"](patch_size=8, num_classes=0, **kwargs)
     if pretrained:
         state_dict = torch.hub.load_state_dict_from_url(
             url="https://dl.fbaipublicfiles.com/dino/dino_deitsmall8_pretrain/dino_deitsmall8_pretrain.pth",

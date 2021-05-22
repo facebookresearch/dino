@@ -8,7 +8,7 @@ PyTorch implementation and pretrained models for DINO. For details, see **Emergi
 </div>
 
 ## Pretrained models
-You can choose to download only the weights of the pretrained backbone used for downstream tasks, or the full checkpoint which contains backbone and projection head weights for both student and teacher networks. We also provide the backbone in `onnx` format, as well as detailed arguments and training/evaluation logs.
+You can choose to download only the weights of the pretrained backbone used for downstream tasks, or the full checkpoint which contains backbone and projection head weights for both student and teacher networks. We also provide the backbone in `onnx` format, as well as detailed arguments and training/evaluation logs. Note that `DeiT-S` and `ViT-S` names refer exactly to the same architecture.
 
 <table>
   <tr>
@@ -19,7 +19,7 @@ You can choose to download only the weights of the pretrained backbone used for 
     <th colspan="6">download</th>
   </tr>
   <tr>
-    <td>DeiT-S/16</td>
+    <td>ViT-S/16</td>
     <td>21M</td>
     <td>74.5%</td>
     <td>77.0%</td>
@@ -31,7 +31,7 @@ You can choose to download only the weights of the pretrained backbone used for 
     <td><a href="https://dl.fbaipublicfiles.com/dino/dino_deitsmall16_pretrain/dino_deitsmall16_pretrain_eval_linear_log.txt">eval logs</a></td>
   </tr>
   <tr>
-    <td>DeiT-S/8</td>
+    <td>ViT-S/8</td>
     <td>21M</td>
     <td>78.3%</td>
     <td>79.7%</td>
@@ -83,8 +83,8 @@ You can choose to download only the weights of the pretrained backbone used for 
 The pretrained models are available on PyTorch Hub.
 ```python
 import torch
-deits16 = torch.hub.load('facebookresearch/dino:main', 'dino_deits16')
-deits8 = torch.hub.load('facebookresearch/dino:main', 'dino_deits8')
+vits16 = torch.hub.load('facebookresearch/dino:main', 'dino_vits16')
+vits8 = torch.hub.load('facebookresearch/dino:main', 'dino_vits8')
 vitb16 = torch.hub.load('facebookresearch/dino:main', 'dino_vitb16')
 vitb8 = torch.hub.load('facebookresearch/dino:main', 'dino_vitb8')
 resnet50 = torch.hub.load('facebookresearch/dino:main', 'dino_resnet50')
@@ -99,15 +99,15 @@ python main_dino.py --help
 ```
 
 ### Vanilla DINO training :sauropod:
-Run DINO with DeiT-small network on a single node with 8 GPUs for 100 epochs with the following command. Training time is 1.75 day and the resulting checkpoint should reach 69.3% on k-NN eval and 74.0% on linear eval. We provide [training](https://dl.fbaipublicfiles.com/dino/example_runs_logs/dino_vanilla_deitsmall16_log.txt) and [linear evaluation](https://dl.fbaipublicfiles.com/dino/example_runs_logs/dino_vanilla_deitsmall16_eval.txt) logs (with batch size 256 at evaluation time) for this run to help reproducibility.
+Run DINO with ViT-small network on a single node with 8 GPUs for 100 epochs with the following command. Training time is 1.75 day and the resulting checkpoint should reach 69.3% on k-NN eval and 74.0% on linear eval. We provide [training](https://dl.fbaipublicfiles.com/dino/example_runs_logs/dino_vanilla_deitsmall16_log.txt) and [linear evaluation](https://dl.fbaipublicfiles.com/dino/example_runs_logs/dino_vanilla_deitsmall16_eval.txt) logs (with batch size 256 at evaluation time) for this run to help reproducibility.
 ```
-python -m torch.distributed.launch --nproc_per_node=8 main_dino.py --arch deit_small --data_path /path/to/imagenet/train --output_dir /path/to/saving_dir
+python -m torch.distributed.launch --nproc_per_node=8 main_dino.py --arch vit_small --data_path /path/to/imagenet/train --output_dir /path/to/saving_dir
 ```
 
 ### Multi-node training
 We use Slurm and [submitit](https://github.com/facebookincubator/submitit) (`pip install submitit`). To train on 2 nodes with 8 GPUs each (total 16 GPUs):
 ```
-python run_with_submitit.py --nodes 2 --ngpus 8 --arch deit_small --data_path /path/to/imagenet/train --output_dir /path/to/saving_dir
+python run_with_submitit.py --nodes 2 --ngpus 8 --arch vit_small --data_path /path/to/imagenet/train --output_dir /path/to/saving_dir
 ```
 
 <details>
@@ -125,7 +125,7 @@ python run_with_submitit.py --nodes 2 --ngpus 8 --use_volta32 --arch vit_base  -
 You can improve the performance of the vanilla run by:
 - training for more epochs: `--epochs 300`,
 - increasing the teacher temperature: `--teacher_temp 0.07 --warmup_teacher_temp_epochs 30`.
-- removing last layer normalization (only safe with `--arch deit_small`): `--norm_last_layer false`,
+- removing last layer normalization (only safe with `--arch vit_small`): `--norm_last_layer false`,
 
 <details>
 <summary>
@@ -133,7 +133,7 @@ Full command.
 </summary>
 
 ```
-python run_with_submitit.py --arch deit_small --epochs 300 --teacher_temp 0.07 --warmup_teacher_temp_epochs 30 --norm_last_layer false --data_path /path/to/imagenet/train --output_dir /path/to/saving_dir
+python run_with_submitit.py --arch vit_small --epochs 300 --teacher_temp 0.07 --warmup_teacher_temp_epochs 30 --norm_last_layer false --data_path /path/to/imagenet/train --output_dir /path/to/saving_dir
 ```
 
 </details>
@@ -184,8 +184,6 @@ python video_generation.py --input_path output/attention \
     --video_only \
     --video_format avi
 ```
-
-Also, check out [this colab](https://gist.github.com/aquadzn/32ac53aa6e485e7c3e09b1a0914f7422) for a video inference notebook.
 
 
 ## Evaluation: k-NN classification on ImageNet
