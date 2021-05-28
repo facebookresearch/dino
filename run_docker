@@ -1,0 +1,9 @@
+#!/bin/sh
+docker run -it \
+    -v /lunit/home/kjo/mmg-ti-research/dino_mmg:/workspace \
+    -v /lunit/data:/lunit/data \
+    --name kjo_dino \
+    --shm-size=256g \
+    --gpus all \
+    kyuheejo/mmg-research:latest-tensorboard-submitit \
+    /bin/bash
