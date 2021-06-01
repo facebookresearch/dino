@@ -41,6 +41,12 @@ torchvision_archs = sorted(name for name in torchvision_models.__dict__
 def get_args_parser():
     parser = argparse.ArgumentParser('DINO', add_help=False)
 
+    # preprocessing
+    parser.add_argument('--mean', type=float, nargs='+', default=[0.485, 0.456, 0.406], #metavar='MEAN',
+                        help='Override mean pixel value of dataset for gaussian normalization during preprocessing, expressed as ratio of max(torch.dtype)')
+    parser.add_argument('--std', type=float, nargs='+', default=[0.229, 0.224, 0.225], #metavar='STD',
+                        help='Override std deviation of dataset for gaussian normalization during preprocessing, expressed as ratio of max(torch.dtype)')
+
     # Model parameters
     parser.add_argument('--arch', default='vit_small', type=str,
         choices=['vit_tiny', 'vit_small', 'vit_base', 'deit_tiny', 'deit_small'] + torchvision_archs,
@@ -124,6 +130,8 @@ def get_args_parser():
     parser.add_argument("--dist_url", default="env://", type=str, help="""url used to set up
         distributed training; see https://pytorch.org/docs/stable/distributed.html""")
     parser.add_argument("--local_rank", default=0, type=int, help="Please ignore and do not set this argument.")
+
+
     return parser
 
 
@@ -139,6 +147,8 @@ def train_dino(args):
         args.global_crops_scale,
         args.local_crops_scale,
         args.local_crops_number,
+        args.mean if len(args.mean) == 3 else 3*(args.mean[0],),
+        args.std if len(args.std) == 3 else 3*(args.std[0],)
     )
     dataset = datasets.ImageFolder(args.data_path, transform=transform)
     sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
@@ -409,7 +419,13 @@ class DINOLoss(nn.Module):
 
 
 class DataAugmentationDINO(object):
-    def __init__(self, global_crops_scale, local_crops_scale, local_crops_number):
+    def __init__(self,
+                 global_crops_scale,
+                 local_crops_scale,
+                 local_crops_number,
+                 preprocess_means = (0.485, 0.456, 0.406),
+                 preprocess_stds = (0.229, 0.224, 0.225)
+                 ):
         flip_and_color_jitter = transforms.Compose([
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomApply(
@@ -418,9 +434,10 @@ class DataAugmentationDINO(object):
             ),
             transforms.RandomGrayscale(p=0.2),
         ])
+
         normalize = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+            transforms.Normalize(preprocess_means, preprocess_stds),
         ])
 
         # first global crop
