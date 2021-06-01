@@ -96,6 +96,7 @@ def display_instances(image, mask, fname="test", figsize=(5, 5), blur=False, con
 
 
 if __name__ == '__main__':
+
     parser = argparse.ArgumentParser('Visualize Self-Attention maps')
     parser.add_argument('--arch', default='vit_small', type=str,
         choices=['vit_tiny', 'vit_small', 'vit_base'], help='Architecture (support only ViT atm).')
@@ -108,6 +109,12 @@ if __name__ == '__main__':
     parser.add_argument('--output_dir', default='.', help='Path where to save visualizations.')
     parser.add_argument("--threshold", type=float, default=0.6, help="""We visualize masks
         obtained by thresholding the self-attention maps to keep xx% of the mass.""")
+
+    parser.add_argument('--mean', type=float, nargs='+', default=[0.485, 0.456, 0.406], #metavar='MEAN',
+                        help='Override mean pixel value of dataset for gaussian normalization during preprocessing, expressed as ratio of max(torch.dtype)')
+    parser.add_argument('--std', type=float, nargs='+', default=[0.229, 0.224, 0.225], #metavar='STD',
+                        help='Override std deviation of dataset for gaussian normalization during preprocessing, expressed as ratio of max(torch.dtype)')
+
     args = parser.parse_args()
 
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
@@ -161,9 +168,13 @@ if __name__ == '__main__':
     else:
         print(f"Provided image path {args.image_path} is non valid.")
         sys.exit(1)
+
+    mean_normalisation = args.mean if len(args.mean) == 3 else 3*(args.mean[0],)
+    std_normalisation = args.std if len(args.std) == 3 else 3*(args.std[0],)
+
     transform = pth_transforms.Compose([
         pth_transforms.ToTensor(),
-        pth_transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+        pth_transforms.Normalize(mean_normalisation, std_normalisation),
     ])
     img = transform(img)
 
