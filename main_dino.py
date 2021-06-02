@@ -45,7 +45,7 @@ def get_args_parser():
     parser.add_argument('--mean', type=float, nargs='+', default=[0.485, 0.456, 0.406],
                         help='Override mean pixel value of dataset for gaussian normalization during preprocessing, expressed as ratio of max(torch.dtype)')
     parser.add_argument('--std', type=float, nargs='+', default=[0.229, 0.224, 0.225],
-                        help='Override std deviation of dataset for gaussian normalization during preprocessing, expressed as ratio of max(torch.dtype)')
+                        help='Override standard deviation of pixel intensities for gaussian normalization during preprocessing, expressed as ratio of max(torch.dtype)')
 
     # Model parameters
     parser.add_argument('--arch', default='vit_small', type=str,

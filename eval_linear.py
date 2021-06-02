@@ -260,7 +260,7 @@ if __name__ == '__main__':
                         type=float,
                         nargs='+',
                         default=[0.229, 0.224, 0.225],
-                        help='Override std deviation of dataset for gaussian normalization during preprocessing, expressed as ratio to max of torch.dtype'
+                        help='Override standard deviation of pixel intensities for gaussian normalization during preprocessing, expressed as ratio to max of torch.dtype'
                         )
 
 
