@@ -161,7 +161,7 @@ class VideoGenerator:
                         pth_transforms.ToTensor(),
                         pth_transforms.Resize(self.args.resize),
                         pth_transforms.Normalize(
-                            (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
+                            self.args.mean, self.args.std
                         ),
                     ]
                 )
@@ -170,7 +170,7 @@ class VideoGenerator:
                     [
                         pth_transforms.ToTensor(),
                         pth_transforms.Normalize(
-                            (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
+                            self.args.mean, self.args.std
                         ),
                     ]
                 )
@@ -364,6 +364,23 @@ def parse_args():
         type=str,
         choices=["mp4", "avi"],
         help="Format of generated video (mp4 or avi).",
+    )
+
+    parser.add_argument(
+        '--mean',
+        type=float,
+        nargs='+',
+        default=[0.485, 0.456, 0.406],
+        help="""Override mean pixel value of dataset for
+        gaussian normalization during preprocessing,
+        expressed as ratio to max of torch.dtype""")
+
+    parser.add_argument(
+        '--std',
+        type=float,
+        nargs='+',
+        default=[0.229, 0.224, 0.225],
+        help='Override standard deviation of pixel values for gaussian normalization during preprocessing, expressed as ratio to max of torch.dtype'
     )
 
     return parser.parse_args()
