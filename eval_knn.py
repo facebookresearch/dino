@@ -31,7 +31,7 @@ def extract_feature_pipeline(args):
         pth_transforms.Resize(256, interpolation=3),
         pth_transforms.CenterCrop(224),
         pth_transforms.ToTensor(),
-        pth_transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+        pth_transforms.Normalize(args.mean, args.std),
     ])
     dataset_train = ReturnIndexDataset(os.path.join(args.data_path, "train"), transform=transform)
     dataset_val = ReturnIndexDataset(os.path.join(args.data_path, "val"), transform=transform)
@@ -198,6 +198,21 @@ if __name__ == '__main__':
         distributed training; see https://pytorch.org/docs/stable/distributed.html""")
     parser.add_argument("--local_rank", default=0, type=int, help="Please ignore and do not set this argument.")
     parser.add_argument('--data_path', default='/path/to/imagenet/', type=str)
+
+    parser.add_argument('--mean',
+                        type=float,
+                        nargs='+',
+                        default=[0.485, 0.456, 0.406],
+                        help="""Override mean pixel value of dataset for
+                        gaussian normalization during preprocessing,
+                        expressed as ratio to max of torch.dtype""")
+    parser.add_argument('--std',
+                        type=float,
+                        nargs='+',
+                        default=[0.229, 0.224, 0.225],
+                        help='Override std deviation of dataset for gaussian normalization during preprocessing, expressed as ratio to max of torch.dtype'
+                        )
+
     args = parser.parse_args()
 
     utils.init_distributed_mode(args)
