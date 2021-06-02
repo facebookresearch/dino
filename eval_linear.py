@@ -38,13 +38,13 @@ def eval_linear(args):
         pth_transforms.RandomResizedCrop(224),
         pth_transforms.RandomHorizontalFlip(),
         pth_transforms.ToTensor(),
-        pth_transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+        pth_transforms.Normalize(args.mean, args.std),
     ])
     val_transform = pth_transforms.Compose([
         pth_transforms.Resize(256, interpolation=3),
         pth_transforms.CenterCrop(224),
         pth_transforms.ToTensor(),
-        pth_transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+        pth_transforms.Normalize(args.mean, args.std),
     ])
     dataset_train = datasets.ImageFolder(os.path.join(args.data_path, "train"), transform=train_transform)
     dataset_val = datasets.ImageFolder(os.path.join(args.data_path, "val"), transform=val_transform)
@@ -248,5 +248,21 @@ if __name__ == '__main__':
     parser.add_argument('--val_freq', default=1, type=int, help="Epoch frequency for validation.")
     parser.add_argument('--output_dir', default=".", help='Path to save logs and checkpoints')
     parser.add_argument('--num_labels', default=1000, type=int, help='Number of labels for linear classifier')
+
+    parser.add_argument('--mean',
+                        type=float,
+                        nargs='+',
+                        default=[0.485, 0.456, 0.406],
+                        help="""Override mean pixel value of dataset for
+                        gaussian normalization during preprocessing,
+                        expressed as ratio to max of torch.dtype""")
+    parser.add_argument('--std',
+                        type=float,
+                        nargs='+',
+                        default=[0.229, 0.224, 0.225],
+                        help='Override std deviation of dataset for gaussian normalization during preprocessing, expressed as ratio to max of torch.dtype'
+                        )
+
+
     args = parser.parse_args()
     eval_linear(args)
