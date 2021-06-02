@@ -98,6 +98,7 @@ def display_instances(image, mask, fname="test", figsize=(5, 5), blur=False, con
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser('Visualize Self-Attention maps')
+
     parser.add_argument('--arch', default='vit_small', type=str,
         choices=['vit_tiny', 'vit_small', 'vit_base'], help='Architecture (support only ViT atm).')
     parser.add_argument('--patch_size', default=8, type=int, help='Patch resolution of the model.')
@@ -107,13 +108,22 @@ if __name__ == '__main__':
         help='Key to use in the checkpoint (example: "teacher")')
     parser.add_argument("--image_path", default=None, type=str, help="Path of the image to load.")
     parser.add_argument('--output_dir', default='.', help='Path where to save visualizations.')
-    parser.add_argument("--threshold", type=float, default=0.6, help="""We visualize masks
-        obtained by thresholding the self-attention maps to keep xx% of the mass.""")
+    parser.add_argument("--threshold", type=float, default=0.6,
+                        help='We visualize masks obtained by thresholding the self-attention maps to keep <THRESHOLD>%% of the mass.')
 
-    parser.add_argument('--mean', type=float, nargs='+', default=[0.485, 0.456, 0.406], #metavar='MEAN',
-                        help='Override mean pixel value of dataset for gaussian normalization during preprocessing, expressed as ratio of max(torch.dtype)')
-    parser.add_argument('--std', type=float, nargs='+', default=[0.229, 0.224, 0.225], #metavar='STD',
-                        help='Override std deviation of dataset for gaussian normalization during preprocessing, expressed as ratio of max(torch.dtype)')
+    parser.add_argument('--mean',
+                        type=float,
+                        nargs='+',
+                        default=[0.485, 0.456, 0.406],
+                        help="""Override mean pixel value of dataset for
+                        gaussian normalization during preprocessing,
+                        expressed as ratio to max of torch.dtype""")
+    parser.add_argument('--std',
+                        type=float,
+                        nargs='+',
+                        default=[0.229, 0.224, 0.225],
+                        help='Override std deviation of dataset for gaussian normalization during preprocessing, expressed as ratio to max of torch.dtype'
+                        )
 
     args = parser.parse_args()
 
@@ -122,8 +132,10 @@ if __name__ == '__main__':
     model = vits.__dict__[args.arch](patch_size=args.patch_size, num_classes=0)
     for p in model.parameters():
         p.requires_grad = False
+
     model.eval()
     model.to(device)
+
     if os.path.isfile(args.pretrained_weights):
         state_dict = torch.load(args.pretrained_weights, map_location="cpu")
         if args.checkpoint_key is not None and args.checkpoint_key in state_dict:
