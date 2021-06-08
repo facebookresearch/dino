@@ -258,6 +258,8 @@ class VideoGenerator:
                 )
                 state_dict = state_dict[self.args.checkpoint_key]
             state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+            # remove `backbone.` prefix induced by multicrop wrapper
+            state_dict = {k.replace("backbone.", ""): v for k, v in state_dict.items()}
             msg = model.load_state_dict(state_dict, strict=False)
             print(
                 "Pretrained weights found at {} and loaded with msg: {}".format(

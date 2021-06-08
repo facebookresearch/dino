@@ -137,15 +137,15 @@ def restart_from_checkpoint(ckp_path, run_variables=None, **kwargs):
         if key in checkpoint and value is not None:
             try:
                 msg = value.load_state_dict(checkpoint[key], strict=False)
-                print("=> loaded {} from checkpoint '{}' with msg {}".format(key, ckp_path, msg))
+                print("=> loaded '{}' from checkpoint '{}' with msg {}".format(key, ckp_path, msg))
             except TypeError:
                 try:
                     msg = value.load_state_dict(checkpoint[key])
-                    print("=> loaded {} from checkpoint '{}'".format(key, ckp_path))
+                    print("=> loaded '{}' from checkpoint: '{}'".format(key, ckp_path))
                 except ValueError:
-                    print("=> failed to load {} from checkpoint '{}'".format(key, ckp_path))
+                    print("=> failed to load '{}' from checkpoint: '{}'".format(key, ckp_path))
         else:
-            print("=> failed to load {} from checkpoint '{}'".format(key, ckp_path))
+            print("=> key '{}' not found in checkpoint: '{}'".format(key, ckp_path))
 
     # re load variable important for the run
     if run_variables is not None:

@@ -105,8 +105,9 @@ if __name__ == '__main__':
     parser.add_argument("--checkpoint_key", default="teacher", type=str,
         help='Key to use in the checkpoint (example: "teacher")')
     parser.add_argument("--image_path", default=None, type=str, help="Path of the image to load.")
+    parser.add_argument("--image_size", default=(480, 480), type=int, nargs="+", help="Resize image.")
     parser.add_argument('--output_dir', default='.', help='Path where to save visualizations.')
-    parser.add_argument("--threshold", type=float, default=0.6, help="""We visualize masks
+    parser.add_argument("--threshold", type=float, default=None, help="""We visualize masks
         obtained by thresholding the self-attention maps to keep xx% of the mass.""")
     args = parser.parse_args()
 
@@ -162,6 +163,7 @@ if __name__ == '__main__':
         print(f"Provided image path {args.image_path} is non valid.")
         sys.exit(1)
     transform = pth_transforms.Compose([
+        pth_transforms.Resize(args.image_size),
         pth_transforms.ToTensor(),
         pth_transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     ])
@@ -181,17 +183,18 @@ if __name__ == '__main__':
     # we keep only the output patch attention
     attentions = attentions[0, :, 0, 1:].reshape(nh, -1)
 
-    # we keep only a certain percentage of the mass
-    val, idx = torch.sort(attentions)
-    val /= torch.sum(val, dim=1, keepdim=True)
-    cumval = torch.cumsum(val, dim=1)
-    th_attn = cumval > (1 - args.threshold)
-    idx2 = torch.argsort(idx)
-    for head in range(nh):
-        th_attn[head] = th_attn[head][idx2[head]]
-    th_attn = th_attn.reshape(nh, w_featmap, h_featmap).float()
-    # interpolate
-    th_attn = nn.functional.interpolate(th_attn.unsqueeze(0), scale_factor=args.patch_size, mode="nearest")[0].cpu().numpy()
+    if args.threshold is not None:
+        # we keep only a certain percentage of the mass
+        val, idx = torch.sort(attentions)
+        val /= torch.sum(val, dim=1, keepdim=True)
+        cumval = torch.cumsum(val, dim=1)
+        th_attn = cumval > (1 - args.threshold)
+        idx2 = torch.argsort(idx)
+        for head in range(nh):
+            th_attn[head] = th_attn[head][idx2[head]]
+        th_attn = th_attn.reshape(nh, w_featmap, h_featmap).float()
+        # interpolate
+        th_attn = nn.functional.interpolate(th_attn.unsqueeze(0), scale_factor=args.patch_size, mode="nearest")[0].cpu().numpy()
 
     attentions = attentions.reshape(nh, w_featmap, h_featmap)
     attentions = nn.functional.interpolate(attentions.unsqueeze(0), scale_factor=args.patch_size, mode="nearest")[0].cpu().numpy()
@@ -204,6 +207,7 @@ if __name__ == '__main__':
         plt.imsave(fname=fname, arr=attentions[j], format='png')
         print(f"{fname} saved.")
 
-    image = skimage.io.imread(os.path.join(args.output_dir, "img.png"))
-    for j in range(nh):
-        display_instances(image, th_attn[j], fname=os.path.join(args.output_dir, "mask_th" + str(args.threshold) + "_head" + str(j) +".png"), blur=False)
+    if args.threshold is not None:
+        image = skimage.io.imread(os.path.join(args.output_dir, "img.png"))
+        for j in range(nh):
+            display_instances(image, th_attn[j], fname=os.path.join(args.output_dir, "mask_th" + str(args.threshold) + "_head" + str(j) +".png"), blur=False)
