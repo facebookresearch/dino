@@ -91,6 +91,14 @@ def load_pretrained_weights(model, pretrained_weights, checkpoint_key, model_nam
             url = "dino_vitbase16_pretrain/dino_vitbase16_pretrain.pth"
         elif model_name == "vit_base" and patch_size == 8:
             url = "dino_vitbase8_pretrain/dino_vitbase8_pretrain.pth"
+        elif model_name == "xcit_small_12_p16":
+            url = "dino_xcit_small_12_p16_pretrain/dino_xcit_small_12_p16_pretrain.pth"
+        elif model_name == "xcit_small_12_p8":
+            url = "dino_xcit_small_12_p8_pretrain/dino_xcit_small_12_p8_pretrain.pth"
+        elif model_name == "xcit_medium_24_p16":
+            url = "dino_xcit_medium_24_p16_pretrain/dino_xcit_medium_24_p16_pretrain.pth"
+        elif model_name == "xcit_medium_24_p8":
+            url = "dino_xcit_medium_24_p8_pretrain/dino_xcit_medium_24_p8_pretrain.pth"
         if url is not None:
             print("Since no pretrained weights have been provided, we load the reference pretrained DINO weights.")
             state_dict = torch.hub.load_state_dict_from_url(url="https://dl.fbaipublicfiles.com/dino/" + url)
@@ -585,13 +593,15 @@ class MultiCropWrapper(nn.Module):
             torch.tensor([inp.shape[-1] for inp in x]),
             return_counts=True,
         )[1], 0)
-        start_idx = 0
+        start_idx, output = 0, torch.empty(0).to(x[0].device)
         for end_idx in idx_crops:
             _out = self.backbone(torch.cat(x[start_idx: end_idx]))
-            if start_idx == 0:
-                output = _out
-            else:
-                output = torch.cat((output, _out))
+            # The output is a tuple with XCiT model. See:
+            # https://github.com/facebookresearch/xcit/blob/master/xcit.py#L404-L405
+            if isinstance(_out, tuple):
+                _out = _out[0]
+            # accumulate outputs
+            output = torch.cat((output, _out))
             start_idx = end_idx
         # Run the head forward on the concatenated features.
         return self.head(output)

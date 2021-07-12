@@ -93,3 +93,59 @@ def dino_resnet50(pretrained=True, **kwargs):
         )
         model.load_state_dict(state_dict, strict=False)
     return model
+
+
+def dino_xcit_small_12_p16(pretrained=True, **kwargs):
+    """
+    XCiT-Small-12/16 pre-trained with DINO.
+    """
+    model = torch.hub.load('facebookresearch/xcit', "xcit_small_12_p16", num_classes=0, **kwargs)
+    if pretrained:
+        state_dict = torch.hub.load_state_dict_from_url(
+            url="https://dl.fbaipublicfiles.com/dino/dino_xcit_small_12_p16_pretrain/dino_xcit_small_12_p16_pretrain.pth",
+            map_location="cpu",
+        )
+        model.load_state_dict(state_dict, strict=True)
+    return model
+
+
+def dino_xcit_small_12_p8(pretrained=True, **kwargs):
+    """
+    XCiT-Small-12/8 pre-trained with DINO.
+    """
+    model = torch.hub.load('facebookresearch/xcit', "xcit_small_12_p8", num_classes=0, **kwargs)
+    if pretrained:
+        state_dict = torch.hub.load_state_dict_from_url(
+            url="https://dl.fbaipublicfiles.com/dino/dino_xcit_small_12_p8_pretrain/dino_xcit_small_12_p8_pretrain.pth",
+            map_location="cpu",
+        )
+        model.load_state_dict(state_dict, strict=True)
+    return model
+
+
+def dino_xcit_medium_24_p16(pretrained=True, **kwargs):
+    """
+    XCiT-Medium-24/16 pre-trained with DINO.
+    """
+    model = torch.hub.load('facebookresearch/xcit', "xcit_medium_24_p16", num_classes=0, **kwargs)
+    if pretrained:
+        state_dict = torch.hub.load_state_dict_from_url(
+            url="https://dl.fbaipublicfiles.com/dino/dino_xcit_medium_24_p16_pretrain/dino_xcit_medium_24_p16_pretrain.pth",
+            map_location="cpu",
+        )
+        model.load_state_dict(state_dict, strict=True)
+    return model
+
+
+def dino_xcit_medium_24_p8(pretrained=True, **kwargs):
+    """
+    XCiT-Medium-24/8 pre-trained with DINO.
+    """
+    model = torch.hub.load('facebookresearch/xcit', "xcit_medium_24_p8", num_classes=0, **kwargs)
+    if pretrained:
+        state_dict = torch.hub.load_state_dict_from_url(
+            url="https://dl.fbaipublicfiles.com/dino/dino_xcit_medium_24_p8_pretrain/dino_xcit_medium_24_p8_pretrain.pth",
+            map_location="cpu",
+        )
+        model.load_state_dict(state_dict, strict=True)
+    return model

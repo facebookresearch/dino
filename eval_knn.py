@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import os
+import sys
 import argparse
 
 import torch
@@ -54,8 +55,14 @@ def extract_feature_pipeline(args):
     print(f"Data loaded with {len(dataset_train)} train and {len(dataset_val)} val imgs.")
 
     # ============ building network ... ============
-    model = vits.__dict__[args.arch](patch_size=args.patch_size, num_classes=0)
-    print(f"Model {args.arch} {args.patch_size}x{args.patch_size} built.")
+    if "vit" in args.arch:
+        model = vits.__dict__[args.arch](patch_size=args.patch_size, num_classes=0)
+        print(f"Model {args.arch} {args.patch_size}x{args.patch_size} built.")
+    elif "xcit" in args.arch:
+        model = torch.hub.load('facebookresearch/xcit', args.arch, num_classes=0)
+    else:
+        print(f"Architecture {args.arch} non supported")
+        sys.exit(1)
     model.cuda()
     utils.load_pretrained_weights(model, args.pretrained_weights, args.checkpoint_key, args.arch, args.patch_size)
     model.eval()
@@ -184,8 +191,7 @@ if __name__ == '__main__':
     parser.add_argument('--pretrained_weights', default='', type=str, help="Path to pretrained weights to evaluate.")
     parser.add_argument('--use_cuda', default=True, type=utils.bool_flag,
         help="Should we store the features on GPU? We recommend setting this to False if you encounter OOM")
-    parser.add_argument('--arch', default='vit_small', type=str,
-        choices=['vit_tiny', 'vit_small', 'vit_base'], help='Architecture (support only ViT atm).')
+    parser.add_argument('--arch', default='vit_small', type=str, help='Architecture (support only ViT and XCiT atm).')
     parser.add_argument('--patch_size', default=16, type=int, help='Patch resolution of the model.')
     parser.add_argument("--checkpoint_key", default="teacher", type=str,
         help='Key to use in the checkpoint (example: "teacher")')

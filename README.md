@@ -80,13 +80,68 @@ You can choose to download only the weights of the pretrained backbone used for 
   </tr>
 </table>
 
-The pretrained models are available on PyTorch Hub.
+We also release XCiT models ([[`arXiv`](https://arxiv.org/abs/2106.09681)] [[`code`](https://github.com/facebookresearch/xcit)]) trained with DINO:
+<table>
+  <tr>
+    <th>arch</th>
+    <th>params</th>
+    <th>k-nn</th>
+    <th>linear</th>
+    <th colspan="4">download</th>
+  </tr>
+  <tr>
+    <td>xcit_small_12_p16</td>
+    <td>26M</td>
+    <td>76.0%</td>
+    <td>77.8%</td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_small_12_p16_pretrain/dino_xcit_small_12_p16_pretrain.pth">backbone only</a></td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_small_12_p16_pretrain/dino_xcit_small_12_p16_pretrain_full_checkpoint.pth">full ckpt</a></td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_small_12_p16_pretrain/args.txt">args</a></td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_small_12_p16_pretrain/dino_xcit_small_12_p16_pretrain_log.txt">logs</a></td>
+  </tr>
+  <tr>
+    <td>xcit_small_12_p8</td>
+    <td>26M</td>
+    <td>77.1%</td>
+    <td>79.2%</td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_small_12_p8_pretrain/dino_xcit_small_12_p8_pretrain.pth">backbone only</a></td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_small_12_p8_pretrain/dino_xcit_small_12_p8_pretrain_full_checkpoint.pth">full ckpt</a></td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_small_12_p8_pretrain/args.txt">args</a></td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_small_12_p8_pretrain/dino_xcit_small_12_p8_pretrain_log.txt">logs</a></td>
+  </tr>
+  <tr>
+    <td>xcit_medium_24_p16</td>
+    <td>84M</td>
+    <td>76.4%</td>
+    <td>78.8%</td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_medium_24_p16_pretrain/dino_xcit_medium_24_p16_pretrain.pth">backbone only</a></td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_medium_24_p16_pretrain/dino_xcit_medium_24_p16_pretrain_full_checkpoint.pth">full ckpt</a></td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_medium_24_p16_pretrain/args.txt">args</a></td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_medium_24_p16_pretrain/dino_xcit_medium_24_p16_pretrain_log.txt">logs</a></td>
+  </tr>
+  <tr>
+    <td>xcit_medium_24_p8</td>
+    <td>84M</td>
+    <td>77.9%</td>
+    <td>80.3%</td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_medium_24_p8_pretrain/dino_xcit_medium_24_p8_pretrain.pth">backbone only</a></td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_medium_24_p8_pretrain/dino_xcit_medium_24_p8_pretrain_full_checkpoint.pth">full ckpt</a></td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_medium_24_p8_pretrain/args.txt">args</a></td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_medium_24_p8_pretrain/dino_xcit_medium_24_p8_pretrain_log.txt">logs</a></td>
+  </tr>
+</table>
+
+### Pretrained models on PyTorch Hub
 ```python
 import torch
 vits16 = torch.hub.load('facebookresearch/dino:main', 'dino_vits16')
 vits8 = torch.hub.load('facebookresearch/dino:main', 'dino_vits8')
 vitb16 = torch.hub.load('facebookresearch/dino:main', 'dino_vitb16')
 vitb8 = torch.hub.load('facebookresearch/dino:main', 'dino_vitb8')
+xcit_small_12_p16 = torch.hub.load('facebookresearch/dino:main', 'dino_xcit_small_12_p16')
+xcit_small_12_p8 = torch.hub.load('facebookresearch/dino:main', 'dino_xcit_small_12_p8')
+xcit_medium_24_p16 = torch.hub.load('facebookresearch/dino:main', 'dino_xcit_medium_24_p16')
+xcit_medium_24_p8 = torch.hub.load('facebookresearch/dino:main', 'dino_xcit_medium_24_p8')
 resnet50 = torch.hub.load('facebookresearch/dino:main', 'dino_resnet50')
 ```
 
