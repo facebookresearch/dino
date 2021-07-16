@@ -631,6 +631,60 @@ def has_batchnorms(model):
     return False
 
 
+class PCA():
+    """
+    Class to  compute and apply PCA.
+    """
+    def __init__(self, dim=256, whit=0.5):
+        self.dim = dim
+        self.whit = whit
+        self.mean = None
+
+    def train_pca(self, cov):
+        """
+        Takes a covariance matrix (np.ndarray) as input.
+        """
+        d, v = np.linalg.eigh(cov)
+        eps = d.max() * 1e-5
+        n_0 = (d < eps).sum()
+        if n_0 > 0:
+            d[d < eps] = eps
+
+        # total energy
+        totenergy = d.sum()
+
+        # sort eigenvectors with eigenvalues order
+        idx = np.argsort(d)[::-1][:self.dim]
+        d = d[idx]
+        v = v[:, idx]
+
+        print("keeping %.2f %% of the energy" % (d.sum() / totenergy * 100.0))
+
+        # for the whitening
+        d = np.diag(1. / d**self.whit)
+
+        # principal components
+        self.dvt = np.dot(d, v.T)
+
+    def apply(self, x):
+        # input is from numpy
+        if isinstance(x, np.ndarray):
+            if self.mean is not None:
+                x -= self.mean
+            return np.dot(self.dvt, x.T).T
+
+        # input is from torch and is on GPU
+        if x.is_cuda:
+            if self.mean is not None:
+                x -= torch.cuda.FloatTensor(self.mean)
+            return torch.mm(torch.cuda.FloatTensor(self.dvt), x.transpose(0, 1)).transpose(0, 1)
+
+        # input if from torch, on CPU
+        if self.mean is not None:
+            x -= torch.FloatTensor(self.mean)
+        return torch.mm(torch.FloatTensor(self.dvt), x.transpose(0, 1)).transpose(0, 1)
+
+
 def compute_ap(ranks, nres):
     """
     Computes average precision for given ranked indexes.

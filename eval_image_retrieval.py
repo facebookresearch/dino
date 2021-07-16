@@ -84,7 +84,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_path', default='/path/to/revisited_paris_oxford/', type=str)
     parser.add_argument('--dataset', default='roxford5k', type=str, choices=['roxford5k', 'rparis6k'])
     parser.add_argument('--multiscale', default=False, type=utils.bool_flag)
-    parser.add_argument('--imsize', default=224, type=int, help='Image size (square)')
+    parser.add_argument('--imsize', default=224, type=int, help='Image size')
     parser.add_argument('--pretrained_weights', default='', type=str, help="Path to pretrained weights to evaluate.")
     parser.add_argument('--use_cuda', default=True, type=utils.bool_flag)
     parser.add_argument('--arch', default='vit_small', type=str, help='Architecture')

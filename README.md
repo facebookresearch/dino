@@ -293,6 +293,18 @@ Oxford:
 python -m torch.distributed.launch --use_env --nproc_per_node=1 eval_image_retrieval.py --imsize 224 --multiscale 0 --data_path /path/to/revisited_paris_oxford/ --dataset roxford5k
 ```
 
+## Evaluation: Copy detection on Copydays
+Step 1: Prepare [Copydays dataset](https://lear.inrialpes.fr/~jegou/data.php#copydays).
+
+Step 2 (opt): Prepare a set of image distractors and a set of images on which to learn the whitening operator.
+In our paper, we use 10k random images from YFCC100M as distractors and 20k random images from YFCC100M (different from the distractors) for computing the whitening operation.
+
+Step 3: Run copy detection:
+```
+python -m torch.distributed.launch --use_env --nproc_per_node=1 eval_copy_detection.py --data_path /path/to/copydays/ --whitening_path /path/to/whitening_data/ --distractors_path /path/to/distractors/
+```
+We report result on the strong subset. For example in the stdout from the command above we get: `eval on strong mAP=0.858`.
+
 ## License
 This repository is released under the Apache 2.0 license as found in the [LICENSE](LICENSE) file.
 
