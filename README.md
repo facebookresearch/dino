@@ -87,7 +87,7 @@ We also release XCiT models ([[`arXiv`](https://arxiv.org/abs/2106.09681)] [[`co
     <th>params</th>
     <th>k-nn</th>
     <th>linear</th>
-    <th colspan="4">download</th>
+    <th colspan="5">download</th>
   </tr>
   <tr>
     <td>xcit_small_12_p16</td>
@@ -98,6 +98,7 @@ We also release XCiT models ([[`arXiv`](https://arxiv.org/abs/2106.09681)] [[`co
     <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_small_12_p16_pretrain/dino_xcit_small_12_p16_pretrain_full_checkpoint.pth">full ckpt</a></td>
     <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_small_12_p16_pretrain/args.txt">args</a></td>
     <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_small_12_p16_pretrain/dino_xcit_small_12_p16_pretrain_log.txt">logs</a></td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_small_12_p16_pretrain/dino_xcit_small_12_p16_pretrain_eval_linear_log.txt">eval</a></td>
   </tr>
   <tr>
     <td>xcit_small_12_p8</td>
@@ -108,6 +109,7 @@ We also release XCiT models ([[`arXiv`](https://arxiv.org/abs/2106.09681)] [[`co
     <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_small_12_p8_pretrain/dino_xcit_small_12_p8_pretrain_full_checkpoint.pth">full ckpt</a></td>
     <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_small_12_p8_pretrain/args.txt">args</a></td>
     <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_small_12_p8_pretrain/dino_xcit_small_12_p8_pretrain_log.txt">logs</a></td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_small_12_p8_pretrain/dino_xcit_small_12_p8_pretrain_eval_linear_log.txt">eval</a></td>
   </tr>
   <tr>
     <td>xcit_medium_24_p16</td>
@@ -118,6 +120,7 @@ We also release XCiT models ([[`arXiv`](https://arxiv.org/abs/2106.09681)] [[`co
     <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_medium_24_p16_pretrain/dino_xcit_medium_24_p16_pretrain_full_checkpoint.pth">full ckpt</a></td>
     <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_medium_24_p16_pretrain/args.txt">args</a></td>
     <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_medium_24_p16_pretrain/dino_xcit_medium_24_p16_pretrain_log.txt">logs</a></td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_medium_24_p16_pretrain/dino_xcit_medium_24_p16_pretrain_eval_linear_log.txt">eval</a></td>
   </tr>
   <tr>
     <td>xcit_medium_24_p8</td>
@@ -128,6 +131,7 @@ We also release XCiT models ([[`arXiv`](https://arxiv.org/abs/2106.09681)] [[`co
     <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_medium_24_p8_pretrain/dino_xcit_medium_24_p8_pretrain_full_checkpoint.pth">full ckpt</a></td>
     <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_medium_24_p8_pretrain/args.txt">args</a></td>
     <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_medium_24_p8_pretrain/dino_xcit_medium_24_p8_pretrain_log.txt">logs</a></td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_medium_24_p8_pretrain/dino_xcit_medium_24_p8_pretrain_eval_linear_log.txt">eval</a></td>
   </tr>
 </table>
 
@@ -257,6 +261,64 @@ To train a supervised linear classifier on frozen weights on a single node with 
 python -m torch.distributed.launch --nproc_per_node=8 eval_linear.py --data_path /path/to/imagenet
 ```
 
+We release the logs and weights from evaluating the different models:
+
+<table>
+  <tr>
+    <th>arch</th>
+    <th>top-1 ImageNet</th>
+    <th colspan="2">linear evaluation</th>
+  </tr>
+  <tr>
+    <td>ViT-S/16</td>
+    <td>77.0%</td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_deitsmall16_pretrain/dino_deitsmall16_linearweights.pth">linear weights</a></td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_deitsmall16_pretrain/dino_deitsmall16_pretrain_eval_linear_log.txt">logs</a></td>
+  </tr>
+  <tr>
+    <td>ViT-S/8</td>
+    <td>79.7%</td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_deitsmall8_pretrain/dino_deitsmall8_linearweights.pth">linear weights</a></td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_deitsmall8_pretrain/dino_deitsmall8_pretrain_eval_linear_log.txt">logs</a></td>
+  </tr>
+  <tr>
+    <td>ViT-B/16</td>
+    <td>78.2%</td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_vitbase16_pretrain/dino_vitbase16_linearweights.pth">linear weights</a></td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_vitbase16_pretrain/dino_vitbase16_pretrain_eval_linear_log.txt">logs</a></td>
+  </tr>
+  <tr>
+    <td>xcit_small_12_p16</td>
+    <td>77.8%</td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_small_12_p16_pretrain/dino_xcit_small_12_p16_linearweights.pth">linear weights</a></td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_small_12_p16_pretrain/dino_xcit_small_12_p16_pretrain_eval_linear_log.txt">logs</a></td>
+  </tr>
+  <tr>
+    <td>xcit_small_12_p8</td>
+    <td>79.2%</td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_small_12_p8_pretrain/dino_xcit_small_12_p8_linearweights.pth">linear weights</a></td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_small_12_p8_pretrain/dino_xcit_small_12_p8_pretrain_eval_linear_log.txt">logs</a></td>
+  </tr>
+  <tr>
+    <td>xcit_medium_24_p16</td>
+    <td>78.8%</td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_medium_24_p16_pretrain/dino_xcit_medium_24_p16_linearweights.pth">linear weights</a></td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_medium_24_p16_pretrain/dino_xcit_medium_24_p16_pretrain_eval_linear_log.txt">logs</a></td>
+  </tr>
+  <tr>
+    <td>xcit_medium_24_p8</td>
+    <td>80.3%</td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_medium_24_p8_pretrain/dino_xcit_medium_24_p8_linearweights.pth">linear weights</a></td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_medium_24_p8_pretrain/dino_xcit_medium_24_p8_pretrain_eval_linear_log.txt">logs</a></td>
+  </tr>
+  <tr>
+    <td>ResNet-50</td>
+    <td>75.3%</td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_resnet50_pretrain/dino_resnet50_linearweights.pth">linear weights</a></td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_resnet50_pretrain/dino_resnet50_pretrain_eval_linear_log.txt">logs</a></td>
+  </tr>
+</table>
+
 ## Evaluation: DAVIS 2017 Video object segmentation
 Please verify that you're using pytorch version 1.7.1 since we are not able to reproduce the results with most recent pytorch 1.8.1 at the moment.
 
@@ -311,10 +373,10 @@ This repository is released under the Apache 2.0 license as found in the [LICENS
 ## Citation
 If you find this repository useful, please consider giving a star :star: and citation :t-rex::
 ```
-@article{caron2021emerging,
+@inproceedings{caron2021emerging,
   title={Emerging Properties in Self-Supervised Vision Transformers},
   author={Caron, Mathilde and Touvron, Hugo and Misra, Ishan and J\'egou, Herv\'e  and Mairal, Julien and Bojanowski, Piotr and Joulin, Armand},
-  journal={arXiv preprint arXiv:2104.14294},
+  booktitle={Proceedings of the International Conference on Computer Vision (ICCV)},
   year={2021}
 }
 ```
