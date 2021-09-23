@@ -288,6 +288,12 @@ We release the logs and weights from evaluating the different models:
     <td><a href="https://dl.fbaipublicfiles.com/dino/dino_vitbase16_pretrain/dino_vitbase16_pretrain_eval_linear_log.txt">logs</a></td>
   </tr>
   <tr>
+    <td>ViT-B/8</td>
+    <td>80.1%</td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_vitbase8_pretrain/dino_vitbase8_linearweights.pth">linear weights</a></td>
+    <td><a href="https://dl.fbaipublicfiles.com/dino/dino_vitbase8_pretrain/dino_vitbase8_pretrain_eval_linear_log.txt">logs</a></td>
+  </tr>
+  <tr>
     <td>xcit_small_12_p16</td>
     <td>77.8%</td>
     <td><a href="https://dl.fbaipublicfiles.com/dino/dino_xcit_small_12_p16_pretrain/dino_xcit_small_12_p16_linearweights.pth">linear weights</a></td>
@@ -318,6 +324,27 @@ We release the logs and weights from evaluating the different models:
     <td><a href="https://dl.fbaipublicfiles.com/dino/dino_resnet50_pretrain/dino_resnet50_pretrain_eval_linear_log.txt">logs</a></td>
   </tr>
 </table>
+
+You can check the performance of the pretrained weights on ImageNet validation set by running the following command lines:
+```
+python eval_linear.py --evaluate --arch vit_small --patch_size 16 --data_path /path/to/imagenet/train
+```
+
+```
+python eval_linear.py --evaluate --arch vit_small --patch_size 8 --data_path /path/to/imagenet/train
+```
+
+```
+python eval_linear.py --evaluate --arch vit_base --patch_size 16 --n_last_blocks 1 --avgpool_patchtokens true --data_path /path/to/imagenet/train
+```
+
+```
+python eval_linear.py --evaluate --arch vit_base --patch_size 8 --n_last_blocks 1 --avgpool_patchtokens true --data_path /path/to/imagenet/train
+```
+
+```
+python eval_linear.py --evaluate --arch resnet50 --data_path /path/to/imagenet/train
+```
 
 ## Evaluation: DAVIS 2017 Video object segmentation
 Please verify that you're using pytorch version 1.7.1 since we are not able to reproduce the results with most recent pytorch 1.8.1 at the moment.
