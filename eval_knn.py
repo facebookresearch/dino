@@ -145,7 +145,7 @@ def knn_classifier(train_features, train_labels, test_features, test_labels, k, 
     train_features = train_features.t()
     num_test_images, num_chunks = test_labels.shape[0], 100
     imgs_per_chunk = num_test_images // num_chunks
-    retrieval_one_hot = torch.zeros(k, num_classes).cuda()
+    retrieval_one_hot = torch.zeros(k, num_classes).to(train_features.device)
     for idx in range(0, num_test_images, imgs_per_chunk):
         # get the features for test images
         features = test_features[
