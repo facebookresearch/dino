@@ -132,7 +132,7 @@ if __name__ == '__main__':
         model = vits.__dict__[args.arch](patch_size=args.patch_size, num_classes=0)
         print(f"Model {args.arch} {args.patch_size}x{args.patch_size} built.")
     elif "xcit" in args.arch:
-        model = torch.hub.load('facebookresearch/xcit', args.arch, num_classes=0)
+        model = torch.hub.load('facebookresearch/xcit:main', args.arch, num_classes=0)
     elif args.arch in torchvision_models.__dict__.keys():
         model = torchvision_models.__dict__[args.arch](num_classes=0)
     else:

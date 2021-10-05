@@ -41,7 +41,7 @@ def eval_linear(args):
         embed_dim = model.embed_dim * (args.n_last_blocks + int(args.avgpool_patchtokens))
     # if the network is a XCiT
     elif "xcit" in args.arch:
-        model = torch.hub.load('facebookresearch/xcit', args.arch, num_classes=0)
+        model = torch.hub.load('facebookresearch/xcit:main', args.arch, num_classes=0)
         embed_dim = model.embed_dim
     # otherwise, we check if the architecture is in torchvision models
     elif args.arch in torchvision_models.__dict__.keys():
