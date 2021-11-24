@@ -28,6 +28,7 @@ from collections import defaultdict, deque
 
 import numpy as np
 import torch
+import wandb
 from torch import nn
 import torch.distributed as dist
 from PIL import ImageFilter, ImageOps
@@ -311,9 +312,10 @@ def reduce_dict(input_dict, average=True):
 
 
 class MetricLogger(object):
-    def __init__(self, delimiter="\t"):
+    def __init__(self, delimiter="\t", use_wandb = True):
         self.meters = defaultdict(SmoothedValue)
         self.delimiter = delimiter
+        self.use_wandb = use_wandb
 
     def update(self, **kwargs):
         for k, v in kwargs.items():
@@ -321,6 +323,7 @@ class MetricLogger(object):
                 v = v.item()
             assert isinstance(v, (float, int))
             self.meters[k].update(v)
+        wandb.log(self.meters)
 
     def __getattr__(self, attr):
         if attr in self.meters:
