@@ -15,6 +15,8 @@ import os
 import argparse
 import json
 from pathlib import Path
+import getpass
+import wandb
 
 import torch
 from torch import nn
@@ -33,6 +35,7 @@ def eval_linear(args):
     print("git:\n  {}\n".format(utils.get_sha()))
     print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
     cudnn.benchmark = True
+    wandb.init(project='dino', entity='vm', name=args.exp_name, sync_tensorboard=True)
 
     # ============ building network ... ============
     # if the network is a Vision Transformer (i.e. vit_tiny, vit_small, vit_base)
@@ -68,7 +71,12 @@ def eval_linear(args):
         pth_transforms.ToTensor(),
         pth_transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     ])
-    dataset_val = datasets.ImageFolder(os.path.join(args.data_path, "val"), transform=val_transform)
+    if args.dataset == "imagenet":
+        dataset_val = datasets.ImageFolder(os.path.join(args.data_path, "val"), transform=val_transform)
+    else:
+        user = getpass.getuser()
+        dataset_val = datasets.CIFAR10(root = f"/scr/jasmine7/cifar10", transform=val_transform, download=True)
+
     val_loader = torch.utils.data.DataLoader(
         dataset_val,
         batch_size=args.batch_size_per_gpu,
@@ -88,7 +96,11 @@ def eval_linear(args):
         pth_transforms.ToTensor(),
         pth_transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     ])
-    dataset_train = datasets.ImageFolder(os.path.join(args.data_path, "train"), transform=train_transform)
+    if args.dataset == "imagenet":
+        dataset_train = datasets.ImageFolder(os.path.join(args.data_path, "train"), transform=train_transform)
+    else:
+        user = getpass.getuser()
+        dataset_train = datasets.CIFAR10(root = f"/scr/jasmine7/cifar10", transform=train_transform, download=True)
     sampler = torch.utils.data.distributed.DistributedSampler(dataset_train)
     train_loader = torch.utils.data.DataLoader(
         dataset_train,
@@ -131,6 +143,7 @@ def eval_linear(args):
         if epoch % args.val_freq == 0 or epoch == args.epochs - 1:
             test_stats = validate_network(val_loader, model, linear_classifier, args.n_last_blocks, args.avgpool_patchtokens)
             print(f"Accuracy at epoch {epoch} of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
+            wandb.log({"val": test_stats['acc1']})
             best_acc = max(best_acc, test_stats["acc1"])
             print(f'Max accuracy so far: {best_acc:.2f}%')
             log_stats = {**{k: v for k, v in log_stats.items()},
@@ -189,6 +202,7 @@ def train(model, linear_classifier, optimizer, loader, epoch, n, avgpool):
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
+    wandb.log({"loss": loss.item(), "lr": optimizer.param_groups[0]["lr"], "epoch": epoch})
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 
@@ -271,7 +285,9 @@ if __name__ == '__main__':
     parser.add_argument("--dist_url", default="env://", type=str, help="""url used to set up
         distributed training; see https://pytorch.org/docs/stable/distributed.html""")
     parser.add_argument("--local_rank", default=0, type=int, help="Please ignore and do not set this argument.")
+    parser.add_argument('--dataset', default='cifar10', type=str, help='Please specify the training dataset.')
     parser.add_argument('--data_path', default='/path/to/imagenet/', type=str)
+    parser.add_argument('--exp_name', default="test", type=str, help='Name for the experiment.')
     parser.add_argument('--num_workers', default=10, type=int, help='Number of data loading workers per GPU.')
     parser.add_argument('--val_freq', default=1, type=int, help="Epoch frequency for validation.")
     parser.add_argument('--output_dir', default=".", help='Path to save logs and checkpoints')

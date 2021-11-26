@@ -31,6 +31,8 @@ import torch.backends.cudnn as cudnn
 import torch.nn.functional as F
 from torchvision import datasets, transforms
 from torchvision import models as torchvision_models
+from utils import l2_normalize
+from img_2_img import Img2Img
 
 import utils
 import vision_transformer as vits
@@ -89,7 +91,7 @@ def get_args_parser():
     parser.add_argument('--clip_grad', type=float, default=3.0, help="""Maximal parameter
         gradient norm if using gradient clipping. Clipping with norm .3 ~ 1.0 can
         help optimization for larger ViT architectures. 0 for disabling.""")
-    parser.add_argument('--batch_size_per_gpu', default=64, type=int,
+    parser.add_argument('--batch_size_per_gpu', default=128, type=int,
         help='Per-GPU batch-size : number of distinct images loaded on one GPU.')
     parser.add_argument('--epochs', default=200, type=int, help='Number of epochs of training.')
     parser.add_argument('--freeze_last_layer', default=1, type=int, help="""Number of epochs
@@ -102,8 +104,8 @@ def get_args_parser():
         help="Number of epochs for the linear learning-rate warm up.")
     parser.add_argument('--min_lr', type=float, default=1e-6, help="""Target LR at the
         end of optimization. We use a cosine LR schedule with linear warmup.""")
-    parser.add_argument('--optimizer', default='adamw', type=str,
-        choices=['adamw', 'sgd', 'lars'], help="""Type of optimizer. We recommend using adamw with ViTs.""")
+    parser.add_argument('--encoder_optimizer', default='adamw', type=str,
+        choices=['adamw', 'sgd', 'lars'], help="""Type of encoder optimizer. We recommend using adamw with ViTs.""")
     parser.add_argument('--drop_path_rate', type=float, default=0.1, help="stochastic depth rate")
 
     # Multi-crop parameters
@@ -117,6 +119,21 @@ def get_args_parser():
     parser.add_argument('--local_crops_scale', type=float, nargs='+', default=(0.05, 0.4),
         help="""Scale range of the cropped image before resizing, relatively to the origin image.
         Used for small local view cropping of multi-crop.""")
+
+    # Viewmaker parameters
+    parser.add_argument('--filter_size', default=32, type=int, 
+        help='Please specify the filter size.')
+    parser.add_argument('--noise_dim', default=100, type=int,
+        help='Please specify the dimension of noise.')
+    parser.add_argument('--view_bound_magnitude', default=0.1, type=float,
+        help='Please specify the budget size.')
+    parser.add_argument('--budget_type', default="all", type=str,
+        help='Please specify the budget type ("all", "partial", or "none").')
+    parser.add_argument('--viewmaker_network', default="basic", type=str,
+        help='Please specify the type of viewmaker network.')
+    parser.add_argument('--view_optimizer', default='adam', type=str, help="""Type of view optimizer.""")
+    parser.add_argument('--t', default=0.07, type=float,
+        help='Please specify the temperature.')
 
     # Misc
     parser.add_argument('--dataset', default='cifar10', type=str,
@@ -144,20 +161,9 @@ def train_dino(args):
 
     # ============ preparing data ... ============
     if args.dataset == "imagenet":
-        transform = DataAugmentationImageNetDINO(
-            args.global_crops_scale,
-            args.local_crops_scale,
-            args.local_crops_number,
-        )
-        dataset = datasets.ImageFolder(args.data_path, transform=transform)
+        dataset = datasets.ImageFolder(args.data_path, transform=transforms.ToTensor())
     else:
-        transform = DataAugmentationCIFAR10DINO(
-            args.global_crops_scale,
-            args.local_crops_scale,
-            args.local_crops_number,
-        )
-        user = getpass.getuser()
-        dataset = datasets.CIFAR10(root = f"/scr/jasmine7/cifar10", transform=transform, download=True)
+        dataset = datasets.CIFAR10(root = f"/scr/jasmine7/cifar10", transform=transforms.ToTensor(), download=True)
     sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
     data_loader = torch.utils.data.DataLoader(
         dataset,
@@ -226,6 +232,21 @@ def train_dino(args):
         p.requires_grad = False
     print(f"Student and Teacher are built: they are both {args.arch} network.")
 
+    # ============ building viewmaker network ... ============
+    view = Img2Img(
+        args.filter_size,
+        args.noise_dim,
+        num_channels=3,
+        bound_magnitude=args.view_bound_magnitude,
+        budget_type = args.budget_type,
+        neutralad=True,
+        network=args.viewmaker_network,
+        activation='relu',
+        clamp=False,
+    )
+    # move viewmaker to gpu
+    view = view.cuda()
+
     # ============ preparing loss ... ============
     dino_loss = DINOLoss(
         args.out_dim,
@@ -236,14 +257,19 @@ def train_dino(args):
         args.epochs,
     ).cuda()
 
-    # ============ preparing optimizer ... ============
-    params_groups = utils.get_params_groups(student)
-    if args.optimizer == "adamw":
-        optimizer = torch.optim.AdamW(params_groups)  # to use with ViTs
-    elif args.optimizer == "sgd":
-        optimizer = torch.optim.SGD(params_groups, lr=0, momentum=0.9)  # lr is set by scheduler
-    elif args.optimizer == "lars":
-        optimizer = utils.LARS(params_groups)  # to use with convnet and large batches
+    # ============ preparing optimizers ... ============
+    torch.autograd.set_detect_anomaly(True)
+    encoder_params_groups = utils.get_params_groups(student)
+    if args.encoder_optimizer != "adamw":
+        print("Encoder optimizer type must be adamW")
+    encoder_optimizer = torch.optim.AdamW(encoder_params_groups)  # to use with ViTs
+    # encoder_optimizer = torch.optim.SGD(params_groups, lr=0, momentum=0.9)  # lr is set by scheduler
+    
+    view_params_groups = utils.get_params_groups(view)
+    if args.view_optimizer != 'adam':
+        print("Encoder optimizer type must be adamW")
+    view_optimizer = torch.optim.Adam(view_params_groups)
+    
     # for mixed precision training
     fp16_scaler = None
     if args.use_fp16:
@@ -273,7 +299,9 @@ def train_dino(args):
         run_variables=to_restore,
         student=student,
         teacher=teacher,
-        optimizer=optimizer,
+        view=view,
+        encoder_optimizer=encoder_optimizer,
+        view_optimizer=view_optimizer,
         fp16_scaler=fp16_scaler,
         dino_loss=dino_loss,
     )
@@ -285,15 +313,17 @@ def train_dino(args):
         data_loader.sampler.set_epoch(epoch)
 
         # ============ training one epoch of DINO ... ============
-        train_stats = train_one_epoch(student, teacher, teacher_without_ddp, dino_loss,
-            data_loader, optimizer, lr_schedule, wd_schedule, momentum_schedule,
-            epoch, fp16_scaler, args)
+        train_stats = train_one_epoch(student, teacher, view, teacher_without_ddp, dino_loss,
+            data_loader, encoder_optimizer, view_optimizer, lr_schedule, wd_schedule, 
+            momentum_schedule, epoch, fp16_scaler, args)
 
         # ============ writing logs ... ============
         save_dict = {
             'student': student.state_dict(),
             'teacher': teacher.state_dict(),
-            'optimizer': optimizer.state_dict(),
+            'view': view.state_dict(),
+            'encoder_optimizer': encoder_optimizer.state_dict(),
+            'view_optimizer': view_optimizer.state_dict(),
             'epoch': epoch + 1,
             'args': args,
             'dino_loss': dino_loss.state_dict(),
@@ -313,50 +343,64 @@ def train_dino(args):
     print('Training time {}'.format(total_time_str))
 
 
-def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loader,
-                    optimizer, lr_schedule, wd_schedule, momentum_schedule,epoch,
-                    fp16_scaler, args):
+def train_one_epoch(student, teacher, view, teacher_without_ddp, dino_loss, data_loader,
+                    encoder_optimizer, view_optimizer, lr_schedule, wd_schedule, 
+                    momentum_schedule, epoch, fp16_scaler, args):
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
-    for it, (images, _) in enumerate(metric_logger.log_every(data_loader, 10, header)):
+    for it, (images, _) in enumerate(data_loader):
         # update weight decay and learning rate according to their schedule
         it = len(data_loader) * epoch + it  # global training iteration
-        for i, param_group in enumerate(optimizer.param_groups):
+        for i, param_group in enumerate(encoder_optimizer.param_groups):
             param_group["lr"] = lr_schedule[it]
             if i == 0:  # only the first group is regularized
                 param_group["weight_decay"] = wd_schedule[it]
 
         # move images to gpu
-        images = [im.cuda(non_blocking=True) for im in images]
+        images = images.cuda()
+        # get viewmaker views of images
+        images1 = view(images)
+        images2 = view(images)
         # teacher and student forward passes + compute dino loss
         with torch.cuda.amp.autocast(fp16_scaler is not None):
-            teacher_output = teacher(images[:2])  # only the 2 global views pass through the teacher
-            student_output = student(images)
-            loss = dino_loss(student_output, teacher_output, epoch)
+            # TODO: is this the correct application? Need to use images2 as well?
+            teacher_output = teacher(images1[:2])  # only the 2 global views pass through the teacher
+            student_output = student(images1)
+            encoder_loss = dino_loss(student_output, teacher_output, epoch)
 
-        if not math.isfinite(loss.item()):
-            print("Loss is {}, stopping training".format(loss.item()), force=True)
+            embs = student(images)
+            embs1 = student(images1)
+            embs2 = student(images2)
+            loss_function = NeuTraLADLoss(embs, embs1, embs2, t=args.t)
+            view_loss = loss_function.get_loss()
+
+        if not math.isfinite(encoder_loss.item()):
+            print("Loss is {}, stopping training".format(encoder_loss.item()), force=True)
             sys.exit(1)
 
         # student update
-        optimizer.zero_grad()
+        encoder_optimizer.zero_grad()
         param_norms = None
         if fp16_scaler is None:
-            loss.backward()
+            encoder_loss.backward()
             if args.clip_grad:
                 param_norms = utils.clip_gradients(student, args.clip_grad)
-            utils.cancel_gradients_last_layer(epoch, student,
-                                              args.freeze_last_layer)
-            optimizer.step()
+            utils.cancel_gradients_last_layer(epoch, student, args.freeze_last_layer)
+            encoder_optimizer.step()
         else:
-            fp16_scaler.scale(loss).backward()
+            fp16_scaler.scale(encoder_loss).backward()
             if args.clip_grad:
-                fp16_scaler.unscale_(optimizer)  # unscale the gradients of optimizer's assigned params in-place
+                fp16_scaler.unscale_(encoder_optimizer)  # unscale the gradients of optimizer's assigned params in-place
                 param_norms = utils.clip_gradients(student, args.clip_grad)
             utils.cancel_gradients_last_layer(epoch, student,
                                               args.freeze_last_layer)
-            fp16_scaler.step(optimizer)
+            fp16_scaler.step(encoder_optimizer)
             fp16_scaler.update()
+        
+        # viewmaker update
+        view_optimizer.zero_grad()
+        view_loss.backward()
+        view_optimizer.step()
 
         # EMA update for the teacher
         with torch.no_grad():
@@ -366,10 +410,10 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
 
         # logging
         torch.cuda.synchronize()
-        metric_logger.update(loss=loss.item())
-        metric_logger.update(lr=optimizer.param_groups[0]["lr"])
-        metric_logger.update(wd=optimizer.param_groups[0]["weight_decay"])
-        wandb.log({"loss": loss.item(), "lr": optimizer.param_groups[0]["lr"], "wd": optimizer.param_groups[0]["weight_decay"], "epoch": epoch})
+        metric_logger.update(encoder_loss=encoder_loss.item())
+        metric_logger.update(lr=encoder_optimizer.param_groups[0]["lr"])
+        metric_logger.update(wd=encoder_optimizer.param_groups[0]["weight_decay"])
+        wandb.log({"encoder_loss": encoder_loss.item(), "view_loss": view_loss.item(),"lr": encoder_optimizer.param_groups[0]["lr"], "wd": optimizer.param_groups[0]["weight_decay"], "epoch": epoch, "view_bound_magnitude": args.view_bound_magnitude})
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
@@ -432,103 +476,59 @@ class DINOLoss(nn.Module):
         self.center = self.center * self.center_momentum + batch_center * (1 - self.center_momentum)
 
 
-class DataAugmentationImageNetDINO(object):
-    def __init__(self, global_crops_scale, local_crops_scale, local_crops_number):
-        flip_and_color_jitter = transforms.Compose([
-            transforms.RandomHorizontalFlip(p=0.5),
-            transforms.RandomApply(
-                [transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)],
-                p=0.8
-            ),
-            transforms.RandomGrayscale(p=0.2),
-        ])
-        normalize = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-        ])
+class NeuTraLADLoss(object):
+    
+    def __init__(self, outputs_orig, outputs1, outputs2, outputs3=None, t=0.07):
+        super().__init__()
+        self.outputs1 = l2_normalize(outputs1, dim=1)
+        self.outputs2 = l2_normalize(outputs2, dim=1)
+        if outputs3 is not None:
+            self.outputs3 = l2_normalize(outputs3, dim=1)
+        else:
+            self.outputs3 = None
+        self.outputs_orig = l2_normalize(outputs_orig, dim=1)
+        self.t = t
 
-        # first global crop
-        self.global_transfo1 = transforms.Compose([
-            transforms.RandomResizedCrop(224, scale=global_crops_scale, interpolation=Image.BICUBIC),
-            flip_and_color_jitter,
-            utils.GaussianBlur(1.0),
-            normalize,
-        ])
-        # second global crop
-        self.global_transfo2 = transforms.Compose([
-            transforms.RandomResizedCrop(224, scale=global_crops_scale, interpolation=Image.BICUBIC),
-            flip_and_color_jitter,
-            utils.GaussianBlur(0.1),
-            utils.Solarization(0.2),
-            normalize,
-        ])
-        # transformation for the local small crops
-        self.local_crops_number = local_crops_number
-        self.local_transfo = transforms.Compose([
-            transforms.RandomResizedCrop(96, scale=local_crops_scale, interpolation=Image.BICUBIC),
-            flip_and_color_jitter,
-            utils.GaussianBlur(p=0.5),
-            normalize,
-        ])
+    def get_loss(self):
+        # https://arxiv.org/pdf/2103.16440.pdf
 
-    def __call__(self, image):
-        crops = []
-        crops.append(self.global_transfo1(image))
-        crops.append(self.global_transfo2(image))
-        for _ in range(self.local_crops_number):
-            crops.append(self.local_transfo(image))
-        return crops
+        batch_size = self.outputs_orig.size(0)  # batch_size x out_dim
+        
+        sim_x_x1 = torch.sum(self.outputs1 * self.outputs_orig, dim=-1) / self.t # [256]
+        sim_x_x2 = torch.sum(self.outputs2 * self.outputs_orig, dim=-1) / self.t # [256]
+        sim_x1_x2 = torch.sum(self.outputs1 * self.outputs2, dim=-1) / self.t # [256]
+        
+        sim_x1_12_cat = torch.cat([sim_x_x1.unsqueeze(-1), sim_x1_x2.unsqueeze(-1)], dim=-1) # [256, 2]
+        sim_x1_12_norm = torch.logsumexp(sim_x1_12_cat, dim=1) # [256]
 
-class DataAugmentationCIFAR10DINO(object):
-    def __init__(self, global_crops_scale, local_crops_scale, local_crops_number):
-        flip_and_color_jitter = transforms.Compose([
-            transforms.RandomHorizontalFlip(p=0.5),
-            transforms.RandomApply(
-                [transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)],
-                p=0.8
-            ),
-            transforms.RandomGrayscale(p=0.2),
-        ])
-        normalize = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-        ])
+        sim_x2_12_cat = torch.cat([sim_x_x2.unsqueeze(-1), sim_x1_x2.unsqueeze(-1)], dim=-1) # [256, 2]
+        sim_x2_12_norm = torch.logsumexp(sim_x2_12_cat, dim=1) # [256]
+        
+        if self.outputs3 is None:
+            loss = -torch.mean((sim_x_x1 - sim_x1_12_norm) + (sim_x_x2 - sim_x2_12_norm))
+            return loss
 
-        # first global crop
-        self.global_transfo1 = transforms.Compose([
-            transforms.RandomResizedCrop(96, scale=global_crops_scale, interpolation=Image.BICUBIC),
-            flip_and_color_jitter,
-            utils.GaussianBlur(1.0),
-            normalize,
-        ])
-        # second global crop
-        self.global_transfo2 = transforms.Compose([
-            transforms.RandomResizedCrop(96, scale=global_crops_scale, interpolation=Image.BICUBIC),
-            flip_and_color_jitter,
-            utils.GaussianBlur(0.1),
-            utils.Solarization(0.2),
-            normalize,
-        ])
-        # transformation for the local small crops
-        self.local_crops_number = local_crops_number
-        self.local_transfo = transforms.Compose([
-            transforms.RandomResizedCrop(32, scale=local_crops_scale, interpolation=Image.BICUBIC),
-            flip_and_color_jitter,
-            utils.GaussianBlur(p=0.5),
-            normalize,
-        ])
+        sim_x_x3 = torch.sum(self.outputs3 * self.outputs_orig, dim=-1) / self.t # [256]
+        sim_x1_x3 = torch.sum(self.outputs1 * self.outputs3, dim=-1) / self.t # [256]
+        sim_x2_x3 = torch.sum(self.outputs2 * self.outputs3, dim=-1) / self.t # [256]
 
-    def __call__(self, image):
-        crops = []
-        crops.append(self.global_transfo1(image))
-        crops.append(self.global_transfo2(image))
-        for _ in range(self.local_crops_number):
-            crops.append(self.local_transfo(image))
-        return crops
+        sim_x1_123_cat = torch.cat([sim_x_x1.unsqueeze(-1), sim_x1_x2.unsqueeze(-1), sim_x1_x3.unsqueeze(-1)], dim=-1) # [256, 2]
+        sim_x1_123_norm = torch.logsumexp(sim_x1_123_cat, dim=1) # [256]
+
+        sim_x2_123_cat = torch.cat([sim_x_x2.unsqueeze(-1), sim_x1_x2.unsqueeze(-1), sim_x2_x3.unsqueeze(-1)], dim=-1) # [256, 2]
+        sim_x2_123_norm = torch.logsumexp(sim_x2_123_cat, dim=1) # [256]
+
+        sim_x3_123_cat = torch.cat([sim_x_x3.unsqueeze(-1), sim_x1_x3.unsqueeze(-1), sim_x2_x3.unsqueeze(-1)], dim=-1) # [256, 2]
+        sim_x3_123_norm = torch.logsumexp(sim_x3_123_cat, dim=1) # [256]
+
+        loss = -torch.mean((sim_x_x1 - sim_x1_123_norm) + (sim_x_x2 - sim_x2_123_norm) + (sim_x_x3 - sim_x1_123_norm))
+        return loss
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('DINO', parents=[get_args_parser()])
     args = parser.parse_args()
+    print("Using NeuTraL AD Loss + Viewmaker")
     args.output_dir = os.path.join(args.output_dir, args.exp_name)
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     train_dino(args)

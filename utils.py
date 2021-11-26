@@ -28,7 +28,9 @@ from collections import defaultdict, deque
 
 import numpy as np
 import torch
+import torch_dct as dct
 from torch import nn
+import torch.nn.functional as F
 import torch.distributed as dist
 from PIL import ImageFilter, ImageOps
 
@@ -127,6 +129,10 @@ def load_pretrained_linear_weights(linear_classifier, model_name, patch_size):
         linear_classifier.load_state_dict(state_dict, strict=True)
     else:
         print("We use random linear weights.")
+
+
+def l2_normalize(x, dim=1):
+    return x / torch.sqrt(torch.sum(x**2, dim=dim).unsqueeze(dim))
 
 
 def clip_gradients(model, clip):
@@ -827,3 +833,103 @@ def multi_scale(samples, model):
     v /= 3
     v /= v.norm()
     return v
+
+def apply_affine(imgs, affine_params, strength):
+    '''Applies affine transformation specified by affine_mat to imgs.
+
+    Args:
+        imgs: [N, C, W, H] batch of images
+        affine_params: [N, 3, 2] batch of parameters for affine matrices
+        strength: float; how much we can deviate from the identity (e.g. 0.3)
+
+    Returns:
+        [N, C, W, H] batch of transformed images
+    '''
+    affine_mat = torch.tanh(affine_params)
+    aff_mat = affine_mat.clone()
+    aff_mat[:, 1, 1] = affine_mat[:, 0, 0]
+    affine_mat = aff_mat
+
+    # Identity transformation matrix.
+    identity = torch.tensor([[
+        [1, 0, 0],
+        [0, 1, 0]
+    ]], dtype=affine_mat.dtype).to(affine_mat.device)
+
+    # Don't allow shear
+    mask = torch.tensor([[
+        [1, 0, 1],
+        [0, 1, 1]
+    ]], dtype=affine_mat.dtype).to(affine_mat.device)
+
+    affine_mat = identity + affine_mat * mask * strength
+
+    f = torch.nn.functional.affine_grid(affine_mat, imgs.shape)
+    transformed_imgs = torch.nn.functional.grid_sample(imgs, f, padding_mode='reflection')
+    return transformed_imgs
+
+
+def apply_color_jitter(imgs, color_jitter_params, strength):
+    '''Shifts the value of each channel.
+
+    Args:
+        [N, C, W, H] batch of images
+        color_jitter_params: [N, 3] batch of parameters for color jitter
+        strength: float; how much we can deviate from the identity (e.g. 0.2) 
+    '''
+    color_jitter_params = torch.tanh(color_jitter_params)
+    color_jitter_delta = (color_jitter_params * \
+                            strength).reshape(imgs.size(0), -1, 1, 1)
+
+    # Ensure they remain valid images (between 0 and 1).
+    imgs = torch.clamp(imgs + color_jitter_delta, 0.0, 1.0)
+    return imgs
+
+def apply_warp(img, warp, strength, smoothness, eps=0.1):
+    '''Warp has shape [batch_size, H, W, 2]'''
+    # [1, H, W, 2]
+    # The 2 is for the 2 components of the displacement field.
+    # This implements the identity displacement field.
+    identity = torch.tensor(
+        np.meshgrid(
+            np.linspace(-1, 1, img.size(-2)),
+            np.linspace(-1, 1, img.size(-1)))
+    ).permute(1, 2, 0).float().unsqueeze(0).to(img.device)
+
+    # Bound the total warp that can be applied
+    norm = torch.norm(warp, dim=[1, 2, 3], p=2, keepdim=True) + 1e-7
+    warp = (warp / norm) * strength
+
+    # warp = (torch.rand(identity.shape) - 0.5) * strength
+    warp = bandpass.gaussian_bandpass(warp.permute(
+        0, 3, 1, 2), 0, 1 / smoothness).permute(0, 2, 3, 1)
+    warped_img = torch.nn.functional.grid_sample(
+        img, identity + warp, padding_mode='reflection')
+    return warped_img
+
+def coord_norm_2d(x):
+    '''Returns norms of coordinates for the last two dimensions of input tensor.
+    
+    E.g. if x is of shape (3, 4, 4), returns a matrix $norms$ of shape (3, 4, 4)
+    where norms[a, b, c] = sqrt(b^2 + c^2). 
+    
+    This is useful for creating a mask to apply a bandpass.
+    '''
+    norms = torch.zeros_like(x)
+    for i in range(x.size(-2)):
+        for j in range(x.size(-1)):
+            norms[..., i, j] = np.sqrt(i**2 + j**2)
+    return norms
+
+def gaussian_mask(x, mean, stdev):
+    '''Returns gaussian pdf scaled so max = 1.'''
+    return torch.exp(- 0.5 * ((x - mean) / stdev)**2)
+
+def gaussian_bandpass(x, mean, std):
+    '''Applies a gaussian bandpass to the image.'''
+    # Discrete Cosine Transform is same shape as original image.
+    # [batch_size, 3 (channels), img_height (y fourier basis), img_width (x fourier basis)]
+    x_dct = dct.dct_2d(x)
+    x_dct_bandpassed = x_dct * gaussian_mask(coord_norm_2d(x_dct), mean, std)
+    x_bandpassed = dct.idct_2d(x_dct_bandpassed)
+    return x_bandpassed
