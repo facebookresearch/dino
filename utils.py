@@ -323,7 +323,8 @@ class MetricLogger(object):
                 v = v.item()
             assert isinstance(v, (float, int))
             self.meters[k].update(v)
-        wandb.log(self.meters)
+            if self.use_wandb:
+                wandb.log({k:v})
 
     def __getattr__(self, attr):
         if attr in self.meters:
