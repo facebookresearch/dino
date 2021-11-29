@@ -312,10 +312,12 @@ def reduce_dict(input_dict, average=True):
 
 
 class MetricLogger(object):
-    def __init__(self, delimiter="\t", use_wandb = True):
+    def __init__(self, args, delimiter="\t"):
         self.meters = defaultdict(SmoothedValue)
         self.delimiter = delimiter
-        self.use_wandb = use_wandb
+        self.use_wandb = args.use_wandb
+        if is_main_process() and self.use_wandb:
+                self.wandb_run = wandb.init(project=args.wandb_project, entity=args.wandb_entity, config=args)
 
     def update(self, **kwargs):
         for k, v in kwargs.items():
@@ -323,7 +325,7 @@ class MetricLogger(object):
                 v = v.item()
             assert isinstance(v, (float, int))
             self.meters[k].update(v)
-            if self.use_wandb:
+            if is_main_process() and self.wandb_run:
                 wandb.log({k:v})
 
     def __getattr__(self, attr):
