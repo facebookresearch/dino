@@ -28,11 +28,16 @@ from collections import defaultdict, deque
 
 import numpy as np
 import torch
-import wandb
 from torch import nn
 import torch.distributed as dist
 from PIL import ImageFilter, ImageOps
 
+try:
+    import wandb
+
+    assert hasattr(wandb, '__version__')  # verify package import not local dir
+except (ImportError, AssertionError):
+    wandb = None
 
 class GaussianBlur(object):
     """

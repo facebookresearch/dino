@@ -29,7 +29,6 @@ import torch.backends.cudnn as cudnn
 import torch.nn.functional as F
 from torchvision import datasets, transforms
 from torchvision import models as torchvision_models
-import wandb
 
 import utils
 import vision_transformer as vits
