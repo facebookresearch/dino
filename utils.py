@@ -32,6 +32,12 @@ from torch import nn
 import torch.distributed as dist
 from PIL import ImageFilter, ImageOps
 
+try:
+    import wandb
+
+    assert hasattr(wandb, '__version__')  # verify package import not local dir
+except (ImportError, AssertionError):
+    wandb = None
 
 class GaussianBlur(object):
     """
@@ -311,9 +317,12 @@ def reduce_dict(input_dict, average=True):
 
 
 class MetricLogger(object):
-    def __init__(self, delimiter="\t"):
+    def __init__(self, args, delimiter="\t"):
         self.meters = defaultdict(SmoothedValue)
         self.delimiter = delimiter
+        self.use_wandb = args.use_wandb
+        if is_main_process() and self.use_wandb:
+                self.wandb_run = wandb.init(project=args.wandb_project, entity=args.wandb_entity, config=args)
 
     def update(self, **kwargs):
         for k, v in kwargs.items():
@@ -321,6 +330,8 @@ class MetricLogger(object):
                 v = v.item()
             assert isinstance(v, (float, int))
             self.meters[k].update(v)
+            if is_main_process() and self.wandb_run:
+                wandb.log({k:v})
 
     def __getattr__(self, attr):
         if attr in self.meters:
