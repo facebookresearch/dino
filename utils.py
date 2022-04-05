@@ -309,11 +309,28 @@ def reduce_dict(input_dict, average=True):
         reduced_dict = {k: v for k, v in zip(names, values)}
     return reduced_dict
 
+try:
+    import functools
+
+    from aim import Run
+
+    @functools.lru_cache()
+    def get_aim_run(repo, run_hash):
+        from aim import Run
+        return Run(run_hash=run_hash, repo=repo)
+
+except ImportError:
+    print("Warning: Aim is not installed. Install aim to use metric logging.")
+    get_aim_run = None
+
 
 class MetricLogger(object):
-    def __init__(self, delimiter="\t"):
+    def __init__(self, args, delimiter="\t"):
         self.meters = defaultdict(SmoothedValue)
         self.delimiter = delimiter
+        self.aim_run = None
+        if args.use_aim and get_aim_run:
+            self.aim_run = get_aim_run(args.aim_repo, args.aim_run_hash)
 
     def update(self, **kwargs):
         for k, v in kwargs.items():
@@ -321,6 +338,8 @@ class MetricLogger(object):
                 v = v.item()
             assert isinstance(v, (float, int))
             self.meters[k].update(v)
+            if self.aim_run:
+                self.aim_run.track(v, name=k)
 
     def __getattr__(self, attr):
         if attr in self.meters:
