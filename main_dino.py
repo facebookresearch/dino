@@ -126,6 +126,13 @@ def get_args_parser():
     parser.add_argument("--dist_url", default="env://", type=str, help="""url used to set up
         distributed training; see https://pytorch.org/docs/stable/distributed.html""")
     parser.add_argument("--local_rank", default=0, type=int, help="Please ignore and do not set this argument.")
+
+    # logging with aim
+    parser.add_argument("--use_aim", default=True, type=bool, help="whether to use aim for logging.")
+    parser.add_argument("--aim_repo", default=None, type=str, help="path to Aim repository.")
+    parser.add_argument("--aim_run_hash", default=None, type=str,
+        help="Aim run hash. Create a new run if not specified.")
+
     return parser
 
 
@@ -301,7 +308,7 @@ def train_dino(args):
 def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loader,
                     optimizer, lr_schedule, wd_schedule, momentum_schedule,epoch,
                     fp16_scaler, args):
-    metric_logger = utils.MetricLogger(delimiter="  ")
+    metric_logger = utils.MetricLogger(args, delimiter="  ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
     for it, (images, _) in enumerate(metric_logger.log_every(data_loader, 10, header)):
         # update weight decay and learning rate according to their schedule
