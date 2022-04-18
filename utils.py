@@ -331,7 +331,8 @@ class MetricLogger(object):
         self.aim_run = None
         if args.use_aim and get_aim_run:
             self.aim_run = get_aim_run(args.aim_repo, args.aim_run_hash)
-            self.aim_run['cli_args'] = vars(args)
+            for key, value in vars(args).items():
+                self.aim_run.set(('cli_args', key), value, strict=False)
 
     def update(self, **kwargs):
         for k, v in kwargs.items():

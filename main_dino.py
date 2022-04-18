@@ -128,9 +128,10 @@ def get_args_parser():
     parser.add_argument("--local_rank", default=0, type=int, help="Please ignore and do not set this argument.")
 
     # logging with aim
-    parser.add_argument("--use_aim", default=True, type = bool, help = "whether to use aim for logging")
-    parser.add_argument("--aim_repo", default=None, type=str, help="path to Aim repository")
-    parser.add_argument("--aim_run_hash", default=None, type=str, help="Aim run hash. Create a new run if not specified")
+    parser.add_argument("--use_aim", default=True, type=bool, help="whether to use aim for logging.")
+    parser.add_argument("--aim_repo", default=None, type=str, help="path to Aim repository.")
+    parser.add_argument("--aim_run_hash", default=None, type=str,
+        help="Aim run hash. Create a new run if not specified.")
 
     return parser
 
