@@ -76,8 +76,8 @@ def addWSICounter(wsiList, wsiEvalCount, wsiEval):
 
 def getGSFromWSIId(wsiId, gsIDslist):
     gsBelongingToWSI = list(filter(lambda gs : wsiId in gs, gsIDslist))
-    #print("WSI ID: %s\n" %wsiId)
-    #print('\n'.join(gsBelongingToWSI))
+    print("WSI ID: %s\n" %wsiId)
+    print('\n'.join(gsBelongingToWSI))
     return gsBelongingToWSI
 
 def createPartitionsCSV(partitions):

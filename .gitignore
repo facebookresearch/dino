@@ -2,3 +2,5 @@
 *.DS_store
 *.pyc
 *.jpg
+*.vscode
+*.csv

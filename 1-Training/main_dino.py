@@ -31,6 +31,7 @@ from torchvision import datasets, transforms
 from torchvision import models as torchvision_models
 
 import utils
+import part_utils
 import vision_transformer as vits
 from vision_transformer import DINOHead
 
@@ -466,6 +467,9 @@ class DataAugmentationDINO(object):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('DINO', parents=[get_args_parser()])
+    #print('\n'.parser.parse_args())
     args = parser.parse_args()
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
-    train_dino(args)
+    #train_dino(args)
+    #partitions = part_utils.createPartitions()
+    part_utils.createPartitionsCSV(partitions)
