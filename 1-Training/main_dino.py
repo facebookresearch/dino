@@ -143,7 +143,7 @@ def train_dino(args):
         args.local_crops_scale,
         args.local_crops_number,
     )
-    dataset = datasets.ImageFolder(args.data_path, transform=transform)
+    dataset = datasets.ImageFolder(root=args.data_path, transform=transform)
     sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
     data_loader = torch.utils.data.DataLoader(
         dataset,
@@ -467,9 +467,9 @@ class DataAugmentationDINO(object):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('DINO', parents=[get_args_parser()])
-    #print('\n'.parser.parse_args())
     args = parser.parse_args()
+    print(args)
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
-    #train_dino(args)
+    train_dino(args)
     #partitions = part_utils.createPartitions()
-    part_utils.createPartitionsCSV(partitions)
+    #part_utils.createPartitionsCSV(partitions)
