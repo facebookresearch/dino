@@ -7,6 +7,23 @@ PyTorch implementation and pretrained models for DINO. For details, see **Emergi
   <img width="100%" alt="DINO illustration" src=".github/dino.gif">
 </div>
 
+## Enviroment Preparation
+
+### WSIs Downloading
+For this project we are using the data provided by the GDC Data Portal (https://portal.gdc.cancer.gov/), correponing to Whole Slide Images (WSIs) belongings to the diagnosis tissue samples from the TCGA-BRCA project. For this purpose we use the tool provided by the GDC Data Portal, called as GDC Data Transfer tool. For this purpose is required to install the GDC Client, which will let us to download whatever files we want using a "mainfest" file, which can be downloaded frome the above page adding the required files to the chart. The gdc-client required for download the required files can be found in https://gdc.cancer.gov/access-data/gdc-data-transfer-tool. 
+
+Once the manifest (TXT file) and client is downloaded, we can retreive the WSIs we selected into the manifest file. For this we have to run the next command inside the same directory where is located the "gdc-client"
+```
+gdc-client download -m manifest.txt
+```
+
+### Requirements installation
+In order run the application is required to install some python dependencies, this with the next command
+```
+pip install -r requirements.txt
+
+```
+
 ## Pretrained models
 You can choose to download only the weights of the pretrained backbone used for downstream tasks, or the full checkpoint which contains backbone and projection head weights for both student and teacher networks. We also provide the backbone in `onnx` format, as well as detailed arguments and training/evaluation logs. Note that `DeiT-S` and `ViT-S` names refer exactly to the same architecture.
 
@@ -215,36 +232,6 @@ python visualize_attention.py
   <img width="100%" alt="Self-attention from a Vision Transformer with 8x8 patches trained with DINO" src=".github/attention_maps.png">
 </div>
 
-## Self-attention video generation
-You can generate videos like the one on the blog post with `video_generation.py`.
-
-https://user-images.githubusercontent.com/46140458/116817761-47885e80-ab68-11eb-9975-d61d5a919e13.mp4
-
-Extract frames from input video and generate attention video:
-```
-python video_generation.py  --pretrained_weights dino_deitsmall8_pretrain.pth \
-    --input_path input/video.mp4 \
-    --output_path output/ \
-    --fps 25
-```
-
-Use folder of frames already extracted and generate attention video:
-```
-python video_generation.py  --pretrained_weights dino_deitsmall8_pretrain.pth \
-    --input_path output/frames/ \
-    --output_path output/ \
-    --resize 256 \
-```
-
-Only generate video from folder of attention maps images:
-```
-python video_generation.py --input_path output/attention \
-    --output_path output/ \
-    --video_only \
-    --video_format avi
-```
-
-
 ## Evaluation: k-NN classification on ImageNet
 To evaluate a simple k-NN classifier with a single GPU on a pre-trained model, run:
 ```
@@ -345,54 +332,6 @@ python eval_linear.py --evaluate --arch vit_base --patch_size 8 --n_last_blocks 
 ```
 python eval_linear.py --evaluate --arch resnet50 --data_path /path/to/imagenet/train
 ```
-
-## Evaluation: DAVIS 2017 Video object segmentation
-Please verify that you're using pytorch version 1.7.1 since we are not able to reproduce the results with most recent pytorch 1.8.1 at the moment.
-
-**Step 1: Prepare DAVIS 2017 data**  
-```
-cd $HOME
-git clone https://github.com/davisvideochallenge/davis-2017 && cd davis-2017
-./data/get_davis.sh
-```
-
-**Step 2: Video object segmentation**  
-```
-python eval_video_segmentation.py --data_path $HOME/davis-2017/DAVIS/ --output_dir /path/to/saving_dir
-```
-
-**Step 3: Evaluate the obtained segmentation**  
-```
-git clone https://github.com/davisvideochallenge/davis2017-evaluation $HOME/davis2017-evaluation
-python $HOME/davis2017-evaluation/evaluation_method.py --task semi-supervised --results_path /path/to/saving_dir --davis_path $HOME/davis-2017/DAVIS/
-```
-
-## Evaluation: Image Retrieval on revisited Oxford and Paris
-Step 1: Prepare revisited Oxford and Paris by following [this repo](https://github.com/filipradenovic/revisitop).
-
-Step 2: Image retrieval (if you do not specify weights with `--pretrained_weights` then by default [DINO weights pretrained on Google Landmark v2 dataset](https://dl.fbaipublicfiles.com/dino/dino_vitsmall16_googlelandmark_pretrain/dino_vitsmall16_googlelandmark_pretrain.pth) will be used).
-
-Paris:
-```
-python -m torch.distributed.launch --use_env --nproc_per_node=1 eval_image_retrieval.py --imsize 512 --multiscale 1 --data_path /path/to/revisited_paris_oxford/ --dataset rparis6k
-```
-
-Oxford:
-```
-python -m torch.distributed.launch --use_env --nproc_per_node=1 eval_image_retrieval.py --imsize 224 --multiscale 0 --data_path /path/to/revisited_paris_oxford/ --dataset roxford5k
-```
-
-## Evaluation: Copy detection on Copydays
-Step 1: Prepare [Copydays dataset](https://lear.inrialpes.fr/~jegou/data.php#copydays).
-
-Step 2 (opt): Prepare a set of image distractors and a set of images on which to learn the whitening operator.
-In our paper, we use 10k random images from YFCC100M as distractors and 20k random images from YFCC100M (different from the distractors) for computing the whitening operation.
-
-Step 3: Run copy detection:
-```
-python -m torch.distributed.launch --use_env --nproc_per_node=1 eval_copy_detection.py --data_path /path/to/copydays/ --whitening_path /path/to/whitening_data/ --distractors_path /path/to/distractors/
-```
-We report result on the strong subset. For example in the stdout from the command above we get: `eval on strong mAP=0.858`.
 
 ## License
 This repository is released under the Apache 2.0 license as found in the [LICENSE](LICENSE) file.
