@@ -98,3 +98,7 @@ def createPartitionsCSV(partitions):
 
                 setID = "evaluation"
             partID+=1
+
+def create_partiton_folder(partition_id):
+    return ""
+

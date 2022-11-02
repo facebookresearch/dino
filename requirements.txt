@@ -1,0 +1,15 @@
+h5py
+numpy
+pandas
+pillow
+tqdm
+einops
+webdataset
+matplotlib
+opencv-python==4.4.0.46
+torch
+torchvision 
+lifelines
+scikit-survival
+scikit-learn
+csvkit
