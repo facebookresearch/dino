@@ -1,4 +1,5 @@
 from __future__ import with_statement
+from csvkit.utilities.csvsql import CSVSQL
 import csv
 import pathlib
 import random
@@ -99,6 +100,13 @@ def createPartitionsCSV(partitions):
                 setID = "evaluation"
             partID+=1
 
+def get_partition_list(partition_id):
+    args_query = ['--query', 'select * from partitions where partition=' + partition_id, '../UCH_CPDAI_GSs/partitions.csv']
+    results_query = CSVSQL(args_query)
+    return list(results_query.main())
+
 def create_partiton_folder(partition_id):
-    return ""
+    args_query = ['--query', 'select * from partitions where partition=' + partition_id, '../UCH_CPDAI_GSs/partitions.csv']
+    results_query = CSVSQL(args_query)
+    print(type(results_query))
 
