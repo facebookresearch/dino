@@ -49,9 +49,10 @@ def get_valid_transforms(size):
     tr = [
         A.Resize(size, size),
         A.Normalize(*mean_std),
-        A.pytorch.transforms.ToTensorV2()]
+        A.pytorch.transforms.ToTensorV2()
+    ]
 
-    return tr
+    return A.Compose(tr)
 
 
 

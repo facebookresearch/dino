@@ -133,8 +133,8 @@ def get_args_parser():
 
     # Validation Parameters
     parser.add_argument("--valid_path", default = "all_in_moda_validation_dataset", help = "")
-    parser.add_argument("--valid_batch_size", default = 64, help = "")
-    parser.add_argument("--valid_every",      default = 10, help = "")
+    parser.add_argument("--valid_batch_size", default = 64, type = int, help = "")
+    parser.add_argument("--valid_every",      default = 10, type = int, help = "")
     
     return parser
 
@@ -308,9 +308,11 @@ def train_dino(args):
             with (Path(args.output_dir) / "log.txt").open("a") as f:
                 f.write(json.dumps(log_stats) + "\n")
         
-        if epoch % args.valid_every:
-            eval_model(teacher, valid_dataset, args.output_dir, title = "teacher_model")
-            eval_model(student, valid_dataset, args.output_dir, title = "student_model")
+        if epoch % args.valid_every == 0:
+            eval_model(teacher, valid_dataset, args.output_dir, 
+            title = "teacher_model", epoch = epoch)
+            eval_model(student, valid_dataset, args.output_dir, 
+            title = "student_model", epoch = epoch)
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))

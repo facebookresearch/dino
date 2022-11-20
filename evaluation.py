@@ -18,19 +18,18 @@ def tsne_graph(df, model_path, title, epoch = ""):
     df["comp-1"] = X_tsne[:,0]
     df["comp-2"] = X_tsne[:,1]
 
-    plt.figure(figsize = (7, 7), dpi = 80, facecolor = 'silver', edgecolor = 'gray')
+    plt.figure(figsize = (15, 15), dpi = 80, facecolor = 'silver', edgecolor = 'gray')
 
-    title  = "TSNE: {}".format(title)
-    title += ", Epoch: {}".format() if epoch else "" 
+    title  = "TSNE_{}".format(title)
+    title += ", Epoch_{}".format(epoch) if epoch else "" 
 
     sns.scatterplot(x = "comp-1", y = "comp-2", 
-                    hue = "label", s = 50, 
-                    palette = sns.color_palette("Spectral", as_cmap=True),
-                    data = df).set(title = "TSNE: {}".format(title, epoch))
+                    hue = "label", s = 50,
+                    data = df).set(title = title)
     
-    save_path = os.path.join(model_path, "tsne_{}".format(title))
+    save_path = os.path.join(model_path, title)
     if not os.path.isdir(save_path): os.makedirs(save_path)
-    fig_path  = os.path.join(save_path, "Epoch:{}.png".format(epoch))
+    fig_path  = os.path.join(save_path, "epoch_{}.png".format(epoch))
     plt.savefig(fig_path)
 
 
@@ -38,10 +37,8 @@ def tsne_graph(df, model_path, title, epoch = ""):
 def eval_model(model, dataloader, model_path, title = "", epoch = ""):
     classes = dataloader.dataset.classes
 
+    dataset_list = list()
     process = tqdm(dataloader, total = len(dataloader), ncols = 200)
-
-    dataset_list = []
-
     for samples, labels in process:
         samples = samples.cuda(non_blocking=True)
         labels  = labels.cuda(non_blocking=True)
