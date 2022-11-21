@@ -309,10 +309,14 @@ def train_dino(args):
                 f.write(json.dumps(log_stats) + "\n")
         
         if epoch % args.valid_every == 0:
+            teacher.eval()
+            student.eval()
             eval_model(teacher, valid_dataset, args.output_dir, 
             title = "teacher_model", epoch = epoch)
             eval_model(student, valid_dataset, args.output_dir, 
             title = "student_model", epoch = epoch)
+            teacher.eval()
+            student.eval()
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))

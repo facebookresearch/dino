@@ -20,14 +20,13 @@ def tsne_graph(df, model_path, title, epoch = ""):
 
     plt.figure(figsize = (15, 15), dpi = 80, facecolor = 'silver', edgecolor = 'gray')
 
-    title  = "TSNE_{}".format(title)
-    title += ", Epoch_{}".format(epoch) if epoch else "" 
+    folder_name  = "TSNE_{}".format(title)
 
     sns.scatterplot(x = "comp-1", y = "comp-2", 
                     hue = "label", s = 50,
-                    data = df).set(title = title)
+                    data = df).set(title = "{}_{}".format(title, epoch))
     
-    save_path = os.path.join(model_path, title)
+    save_path = os.path.join(model_path, folder_name)
     if not os.path.isdir(save_path): os.makedirs(save_path)
     fig_path  = os.path.join(save_path, "epoch_{}.png".format(epoch))
     plt.savefig(fig_path)
