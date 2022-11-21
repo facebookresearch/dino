@@ -7,7 +7,7 @@ from tqdm import tqdm
 from matplotlib import pyplot as plt
 from sklearn.manifold import TSNE
 
-
+from torch.nn.functional import normalize
 
 def tsne_graph(df, output_dir, epoch, name):
     X = np.array(df['feat'].to_list())
@@ -45,9 +45,12 @@ def evaluation(teacher_model, student_model, dataloader, output_dir, epoch = "")
         samples = samples.cuda(non_blocking=True)
         labels  = labels.cuda(non_blocking=True)
         
-        feats_student = student_model(samples)
         feats_teacher = teacher_model(samples)
+        feats_student = student_model(samples)
         
+        feats_student = normalize(feats_teacher)
+        feats_student = normalize(feats_student)
+
         for i in range(len(labels)):
             label = labels[i]
             feat_t = feats_teacher[i]
