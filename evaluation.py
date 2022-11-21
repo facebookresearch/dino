@@ -22,13 +22,16 @@ def tsne_graph(df, output_dir, epoch, name):
 
     folder_name  = "TSNE_{}".format(name)
 
-    sns.scatterplot(x = "comp-1", y = "comp-2", 
-                    hue = "label", s = 50,
-                    data = df).set(title = "{}, Epoch: {}".format(name, epoch))
-    
     save_path = os.path.join(output_dir, folder_name)
     if not os.path.isdir(save_path): os.makedirs(save_path)
     fig_path  = os.path.join(save_path, "epoch_{}.png".format(epoch))
+
+    sns.scatterplot(x = "comp-1", y = "comp-2", 
+                    hue = "label", s = 50,
+                    palette = sns.color_palette("Paired"),
+                    data = df).set(title = "{}, Epoch: {}".format(name, epoch))
+    plt.xlim([-60, 60])
+    plt.ylim([-60, 60])
     plt.savefig(fig_path)
 
 
