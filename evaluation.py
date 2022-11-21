@@ -9,7 +9,7 @@ from sklearn.manifold import TSNE
 
 
 
-def tsne_graph(df, model_path, title, epoch = ""):
+def tsne_graph(df, output_dir, epoch, name):
     X = np.array(df['feat'].to_list())
     X = np.reshape(X, (X.shape[0], -1))
 
@@ -20,38 +20,47 @@ def tsne_graph(df, model_path, title, epoch = ""):
 
     plt.figure(figsize = (15, 15), dpi = 80, facecolor = 'silver', edgecolor = 'gray')
 
-    folder_name  = "TSNE_{}".format(title)
+    folder_name  = "TSNE_{}".format(name)
 
     sns.scatterplot(x = "comp-1", y = "comp-2", 
                     hue = "label", s = 50,
-                    data = df).set(title = "{}_{}".format(title, epoch))
+                    data = df).set(title = "{}, Epoch: {}".format(name, epoch))
     
-    save_path = os.path.join(model_path, folder_name)
+    save_path = os.path.join(output_dir, folder_name)
     if not os.path.isdir(save_path): os.makedirs(save_path)
     fig_path  = os.path.join(save_path, "epoch_{}.png".format(epoch))
     plt.savefig(fig_path)
 
 
 
-def eval_model(model, dataloader, model_path, title = "", epoch = ""):
+def evaluation(teacher_model, student_model, dataloader, output_dir, epoch = ""):
     classes = dataloader.dataset.classes
 
-    dataset_list = list()
+    student_results, teacher_results = list()
     process = tqdm(dataloader, total = len(dataloader), ncols = 200)
     for samples, labels in process:
         samples = samples.cuda(non_blocking=True)
         labels  = labels.cuda(non_blocking=True)
         
-        feats = model(samples)
+        feats_student = student_model(samples)
+        feats_teacher = teacher_model(samples)
         
         for i in range(len(labels)):
             label = labels[i]
-            feat  = feats[i]
-            dataset_list.append({
-                "label" : classes[label.item()],
-                "feat"  : feat.cpu().detach().numpy()})
+            feat_t = feats_teacher[i]
+            feat_s = feats_student[i]
 
-    df = pd.DataFrame(dataset_list)
-    
-    tsne_graph(df, model_path, title, epoch)
+            teacher_results.append({
+                "label" : classes[label.item()],
+                "feat"  : feat_t.cpu().detach().numpy()})
+
+            student_results.append({
+                "label" : classes[label.item()],
+                "feat"  : feat_s.cpu().detach().numpy()})
+
+    teacher_df = pd.DataFrame(teacher_results)
+    student_df = pd.DataFrame(student_results)
+
+    tsne_graph(teacher_df, output_dir, epoch, name = "teacher")
+    tsne_graph(student_df, output_dir, epoch, name = "student")
 

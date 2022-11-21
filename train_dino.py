@@ -35,7 +35,7 @@ import vision_transformer as vits
 from vision_transformer import DINOHead
 from dataset import get_valid_transforms
 from dataset import get as get_valid_dataset
-from evaluation import eval_model
+from evaluation import evaluation
 
 
 torchvision_archs = sorted(name for name in torchvision_models.__dict__
@@ -309,14 +309,10 @@ def train_dino(args):
                 f.write(json.dumps(log_stats) + "\n")
         
         if epoch % args.valid_every == 0:
-            teacher.eval()
-            student.eval()
-            eval_model(teacher, valid_dataset, args.output_dir, 
-            title = "teacher_model", epoch = epoch)
-            eval_model(student, valid_dataset, args.output_dir, 
-            title = "student_model", epoch = epoch)
-            teacher.eval()
-            student.eval()
+            evaluation(teacher, student, valid_dataset, 
+                       args.output_dir, epoch = epoch)
+            teacher.train()
+            student.train()
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
