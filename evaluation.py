@@ -46,7 +46,7 @@ def tsne_graph(df, output_dir, epoch, name):
 def evaluation(teacher_model, student_model, dataloader, output_dir, epoch = ""):
     classes = dataloader.dataset.classes
 
-    student_results, teacher_results = list()
+    student_results, teacher_results = list(), list()
     process = tqdm(dataloader, total = len(dataloader), ncols = 200)
     for samples, labels in process:
         samples = samples.cuda(non_blocking=True)
