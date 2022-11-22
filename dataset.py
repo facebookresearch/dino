@@ -57,12 +57,12 @@ def get_valid_transforms(size):
 
 
 #
-def get(root, dataset, transforms, batch_size):
+def get(root, dataset, transforms, batch_size, shuffle = False):
     
     dataset = CustomDataset(root = root, dataset = dataset, 
                              transform = transforms)
     
-    loader = DataLoader(dataset, batch_size = batch_size, shuffle = True)
+    loader = DataLoader(dataset, batch_size = batch_size, shuffle = shuffle)
 
     return loader
 
