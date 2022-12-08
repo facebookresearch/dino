@@ -80,7 +80,10 @@ def evaluation(teacher_model, student_model,
 
     if wandb_log:
         wandb.log({
-            "teacher_tsne" : wandb.plot.scatter(teacher_tsne_df, "comp-1", "comp-2"),
-            "student_tsne" : wandb.plot.scatter(student_tsne_df, "comp-1", "comp-2")
+            "teacher_tsne" : wandb.plot.scatter(
+                                                wandb.Table(data = teacher_tsne_df, columns = teacher_tsne_df.columns), 
+                                                "comp-1", "comp-2"),
+            "student_tsne" : wandb.plot.scatter(wandb.Table(data = student_tsne_df, columns = student_tsne_df.columns), 
+                                                "comp-1", "comp-2")
         })
 
