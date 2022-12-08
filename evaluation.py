@@ -38,7 +38,7 @@ def tsne_graph(df, output_dir, epoch, name, classes):
     plt.xlim([-80, 80])
     plt.ylim([-80, 80])
     plt.savefig(fig_path)
-    return df
+    return fig_path
 
 
 
@@ -75,15 +75,12 @@ def evaluation(teacher_model, student_model,
     teacher_df = pd.DataFrame(teacher_results)
     student_df = pd.DataFrame(student_results)
 
-    teacher_tsne_df = tsne_graph(teacher_df, output_dir, epoch, "teacher", classes)
-    student_tsne_df = tsne_graph(student_df, output_dir, epoch, "student", classes)
+    teacher_tsne_path = tsne_graph(teacher_df, output_dir, epoch, "teacher", classes)
+    student_tsne_path = tsne_graph(student_df, output_dir, epoch, "student", classes)
 
     if wandb_log:
         wandb.log({
-            "teacher_tsne" : wandb.plot.scatter(
-                                                wandb.Table(data = teacher_tsne_df, columns = teacher_tsne_df.columns), 
-                                                "comp-1", "comp-2"),
-            "student_tsne" : wandb.plot.scatter(wandb.Table(data = student_tsne_df, columns = student_tsne_df.columns), 
-                                                "comp-1", "comp-2")
+            "teacher_tsne" : wandb.Image(teacher_tsne_path),
+            "student_tsne" : wandb.Image(student_tsne_path)
         })
 
