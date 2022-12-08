@@ -36,7 +36,7 @@ from vision_transformer import DINOHead
 from dataset import get_valid_transforms
 from dataset import get as get_valid_dataset
 from evaluation import evaluation
-
+import wandb
 
 torchvision_archs = sorted(name for name in torchvision_models.__dict__
     if name.islower() and not name.startswith("__")
@@ -46,6 +46,7 @@ def get_args_parser():
     parser = argparse.ArgumentParser('DINO', add_help=False)
 
     # Model parameters
+    parser.add_argument('--project_name', required=True, type = str, help = 'Name of the project')
     parser.add_argument('--arch', default='vit_small', type=str,
         choices=['vit_tiny', 'vit_small', 'vit_base', 'xcit', 'deit_tiny', 'deit_small'] \
                 + torchvision_archs + torch.hub.list("facebookresearch/xcit:main"),
@@ -123,13 +124,15 @@ def get_args_parser():
     # Misc
     parser.add_argument('--data_path', default='/path/to/imagenet/train/', type=str,
         help='Please specify path to the ImageNet training data.')
-    parser.add_argument('--output_dir', default=".", type=str, help='Path to save logs and checkpoints.')
     parser.add_argument('--saveckp_freq', default=20, type=int, help='Save checkpoint every x epochs.')
     parser.add_argument('--seed', default=0, type=int, help='Random seed.')
     parser.add_argument('--num_workers', default=10, type=int, help='Number of data loading workers per GPU.')
     parser.add_argument("--dist_url", default="env://", type=str, help="""url used to set up
         distributed training; see https://pytorch.org/docs/stable/distributed.html""")
     parser.add_argument("--local_rank", default=0, type=int, help="Please ignore and do not set this argument.")
+    parser.add_argument('--result_path', default = "results", type = str, help = 'keep it empty if wont use')
+    parser.add_argument('--wandb_entity', default = "", type = str, help = 'keep it empty if wont use')
+    parser.add_argument('--version', default = "", type = str, help = 'keep it empty if wont use')
 
     # Validation Parameters
     parser.add_argument("--valid_path", default = "all_in_moda_validation_dataset", help = "")
@@ -145,6 +148,13 @@ def train_dino(args):
     print("git:\n  {}\n".format(utils.get_sha()))
     print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
     cudnn.benchmark = True
+
+    # ============ Wandb Log ... ============
+    if args.wandb_entity: 
+        wandb.init(entity = args.wandb_entity, 
+            project = args.project_name, 
+            config  = args, 
+            name = "{}_{}".format(args.arch, args.version))
 
     # ============ preparing data ... ============
     transform = DataAugmentationDINO(
@@ -307,10 +317,18 @@ def train_dino(args):
         if utils.is_main_process():
             with (Path(args.output_dir) / "log.txt").open("a") as f:
                 f.write(json.dumps(log_stats) + "\n")
-        
+
+        if args.wandb_entity:
+            wandb.log({
+                'epoch'         : epoch + 1,
+                'dino_loss'     : dino_loss.state_dict(),
+                'learning_rate' : optimizer.param_groups[0]["lr"],
+                'weight_decay'  : optimizer.param_groups[0]["weight_decay"]
+            })
+
         if epoch % args.valid_every == 0:
             evaluation(teacher, student, valid_dataset, 
-                       args.output_dir, epoch = epoch)
+                       args.output_dir, epoch = epoch, wandb_log = args.wandb_entity)
             teacher.train()
             student.train()
 
@@ -488,5 +506,6 @@ class DataAugmentationDINO(object):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('DINO', parents=[get_args_parser()])
     args = parser.parse_args()
-    Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+    args.output_dir = os.path.join(args.result_path, "{}_{}".format(args.project_name, args.version))
+    if not os.path.isdir(args.output_dir): os.makedirs(args.output_dir)
     train_dino(args)
