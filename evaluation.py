@@ -1,4 +1,5 @@
 import os
+import wandb
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -8,6 +9,8 @@ from matplotlib import pyplot as plt
 from sklearn.manifold import TSNE
 
 from torch.nn.functional import normalize
+
+
 
 def tsne_graph(df, output_dir, epoch, name, classes):
     X = np.array(df['feat'].to_list())
@@ -35,10 +38,12 @@ def tsne_graph(df, output_dir, epoch, name, classes):
     plt.xlim([-80, 80])
     plt.ylim([-80, 80])
     plt.savefig(fig_path)
+    return df
 
 
 
-def evaluation(teacher_model, student_model, dataloader, output_dir, epoch = ""):
+def evaluation(teacher_model, student_model, 
+               dataloader, output_dir, epoch = "", wandb_log = False):
     classes = dataloader.dataset.classes
     teacher_model.eval(), student_model.eval()
 
@@ -70,6 +75,12 @@ def evaluation(teacher_model, student_model, dataloader, output_dir, epoch = "")
     teacher_df = pd.DataFrame(teacher_results)
     student_df = pd.DataFrame(student_results)
 
-    tsne_graph(teacher_df, output_dir, epoch, "teacher", classes)
-    tsne_graph(student_df, output_dir, epoch, "student", classes)
+    teacher_tsne_df = tsne_graph(teacher_df, output_dir, epoch, "teacher", classes)
+    student_tsne_df = tsne_graph(student_df, output_dir, epoch, "student", classes)
+
+    if wandb_log:
+        wandb.log({
+            "teacher_tsne" : wandb.plot.scatter(teacher_tsne_df, "comp-1", "comp-2"),
+            "student_tsne" : wandb.plot.scatter(student_tsne_df, "comp-1", "comp-2")
+        })
 
