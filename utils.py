@@ -30,8 +30,9 @@ import numpy as np
 import torch
 from torch import nn
 import torch.distributed as dist
-from PIL import ImageFilter, ImageOps
+from PIL import ImageFilter, ImageOps, ImageFile
 
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 class GaussianBlur(object):
     """
