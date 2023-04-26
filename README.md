@@ -1,3 +1,5 @@
+:new: Please check out our most recent project in this line of work: [DINOv2](https://github.com/facebookresearch/dinov2)
+
 # Self-Supervised Vision Transformers with DINO
 
 PyTorch implementation and pretrained models for DINO. For details, see **Emerging Properties in Self-Supervised Vision Transformers**.  
