@@ -1,4 +1,17 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+#     http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import os
 import glob
 import sys
@@ -175,7 +188,7 @@ class VideoGenerator:
             w_featmap = img.shape[-2] // self.args.patch_size
             h_featmap = img.shape[-1] // self.args.patch_size
 
-            attentions = self.model.forward_selfattention(img.to(DEVICE))
+            attentions = self.model.get_last_selfattention(img.to(DEVICE))
 
             nh = attentions.shape[1]  # number of head
 
@@ -246,6 +259,10 @@ class VideoGenerator:
                 )
                 state_dict = state_dict[self.args.checkpoint_key]
             state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+
+            # remove `backbone.` prefix induced by multicrop wrapper
+            state_dict = {k.replace("backbone.", ""): v for k, v in state_dict.items()}
+
             msg = model.load_state_dict(state_dict, strict=False)
             print(
                 "Pretrained weights found at {} and loaded with msg: {}".format(
@@ -257,9 +274,10 @@ class VideoGenerator:
                 "Please use the `--pretrained_weights` argument to indicate the path of the checkpoint to evaluate."
             )
             url = None
-            if self.args.arch == "deit_small" and self.args.patch_size == 16:
+
+            if self.args.arch == "vit_small" and self.args.patch_size == 16:
                 url = "dino_deitsmall16_pretrain/dino_deitsmall16_pretrain.pth"
-            elif self.args.arch == "deit_small" and self.args.patch_size == 8:
+            elif self.args.arch == "vit_small" and self.args.patch_size == 8:
                 url = "dino_deitsmall8_300ep_pretrain/dino_deitsmall8_300ep_pretrain.pth"  # model used for visualizations in our paper
             elif self.args.arch == "vit_base" and self.args.patch_size == 16:
                 url = "dino_vitbase16_pretrain/dino_vitbase16_pretrain.pth"
@@ -284,9 +302,9 @@ def parse_args():
     parser = argparse.ArgumentParser("Generation self-attention video")
     parser.add_argument(
         "--arch",
-        default="deit_small",
+        default="vit_small",
         type=str,
-        choices=["deit_tiny", "deit_small", "vit_base"],
+        choices=["vit_tiny", "vit_small", "vit_base"],
         help="Architecture (support only ViT atm).",
     )
     parser.add_argument(

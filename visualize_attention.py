@@ -1,4 +1,16 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+#     http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import os
 import sys
 import argparse
@@ -85,16 +97,17 @@ def display_instances(image, mask, fname="test", figsize=(5, 5), blur=False, con
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Visualize Self-Attention maps')
-    parser.add_argument('--arch', default='deit_small', type=str,
-        choices=['deit_tiny', 'deit_small', 'vit_base'], help='Architecture (support only ViT atm).')
+    parser.add_argument('--arch', default='vit_small', type=str,
+        choices=['vit_tiny', 'vit_small', 'vit_base'], help='Architecture (support only ViT atm).')
     parser.add_argument('--patch_size', default=8, type=int, help='Patch resolution of the model.')
     parser.add_argument('--pretrained_weights', default='', type=str,
         help="Path to pretrained weights to load.")
     parser.add_argument("--checkpoint_key", default="teacher", type=str,
         help='Key to use in the checkpoint (example: "teacher")')
     parser.add_argument("--image_path", default=None, type=str, help="Path of the image to load.")
+    parser.add_argument("--image_size", default=(480, 480), type=int, nargs="+", help="Resize image.")
     parser.add_argument('--output_dir', default='.', help='Path where to save visualizations.')
-    parser.add_argument("--threshold", type=float, default=0.6, help="""We visualize masks
+    parser.add_argument("--threshold", type=float, default=None, help="""We visualize masks
         obtained by thresholding the self-attention maps to keep xx% of the mass.""")
     args = parser.parse_args()
 
@@ -110,15 +123,18 @@ if __name__ == '__main__':
         if args.checkpoint_key is not None and args.checkpoint_key in state_dict:
             print(f"Take key {args.checkpoint_key} in provided checkpoint dict")
             state_dict = state_dict[args.checkpoint_key]
+        # remove `module.` prefix
         state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+        # remove `backbone.` prefix induced by multicrop wrapper
+        state_dict = {k.replace("backbone.", ""): v for k, v in state_dict.items()}
         msg = model.load_state_dict(state_dict, strict=False)
         print('Pretrained weights found at {} and loaded with msg: {}'.format(args.pretrained_weights, msg))
     else:
         print("Please use the `--pretrained_weights` argument to indicate the path of the checkpoint to evaluate.")
         url = None
-        if args.arch == "deit_small" and args.patch_size == 16:
+        if args.arch == "vit_small" and args.patch_size == 16:
             url = "dino_deitsmall16_pretrain/dino_deitsmall16_pretrain.pth"
-        elif args.arch == "deit_small" and args.patch_size == 8:
+        elif args.arch == "vit_small" and args.patch_size == 8:
             url = "dino_deitsmall8_300ep_pretrain/dino_deitsmall8_300ep_pretrain.pth"  # model used for visualizations in our paper
         elif args.arch == "vit_base" and args.patch_size == 16:
             url = "dino_vitbase16_pretrain/dino_vitbase16_pretrain.pth"
@@ -147,6 +163,7 @@ if __name__ == '__main__':
         print(f"Provided image path {args.image_path} is non valid.")
         sys.exit(1)
     transform = pth_transforms.Compose([
+        pth_transforms.Resize(args.image_size),
         pth_transforms.ToTensor(),
         pth_transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     ])
@@ -159,24 +176,25 @@ if __name__ == '__main__':
     w_featmap = img.shape[-2] // args.patch_size
     h_featmap = img.shape[-1] // args.patch_size
 
-    attentions = model.forward_selfattention(img.to(device))
+    attentions = model.get_last_selfattention(img.to(device))
 
     nh = attentions.shape[1] # number of head
 
     # we keep only the output patch attention
     attentions = attentions[0, :, 0, 1:].reshape(nh, -1)
 
-    # we keep only a certain percentage of the mass
-    val, idx = torch.sort(attentions)
-    val /= torch.sum(val, dim=1, keepdim=True)
-    cumval = torch.cumsum(val, dim=1)
-    th_attn = cumval > (1 - args.threshold)
-    idx2 = torch.argsort(idx)
-    for head in range(nh):
-        th_attn[head] = th_attn[head][idx2[head]]
-    th_attn = th_attn.reshape(nh, w_featmap, h_featmap).float()
-    # interpolate
-    th_attn = nn.functional.interpolate(th_attn.unsqueeze(0), scale_factor=args.patch_size, mode="nearest")[0].cpu().numpy()
+    if args.threshold is not None:
+        # we keep only a certain percentage of the mass
+        val, idx = torch.sort(attentions)
+        val /= torch.sum(val, dim=1, keepdim=True)
+        cumval = torch.cumsum(val, dim=1)
+        th_attn = cumval > (1 - args.threshold)
+        idx2 = torch.argsort(idx)
+        for head in range(nh):
+            th_attn[head] = th_attn[head][idx2[head]]
+        th_attn = th_attn.reshape(nh, w_featmap, h_featmap).float()
+        # interpolate
+        th_attn = nn.functional.interpolate(th_attn.unsqueeze(0), scale_factor=args.patch_size, mode="nearest")[0].cpu().numpy()
 
     attentions = attentions.reshape(nh, w_featmap, h_featmap)
     attentions = nn.functional.interpolate(attentions.unsqueeze(0), scale_factor=args.patch_size, mode="nearest")[0].cpu().numpy()
@@ -189,6 +207,7 @@ if __name__ == '__main__':
         plt.imsave(fname=fname, arr=attentions[j], format='png')
         print(f"{fname} saved.")
 
-    image = skimage.io.imread(os.path.join(args.output_dir, "img.png"))
-    for j in range(nh):
-        display_instances(image, th_attn[j], fname=os.path.join(args.output_dir, "mask_th" + str(args.threshold) + "_head" + str(j) +".png"), blur=False)
+    if args.threshold is not None:
+        image = skimage.io.imread(os.path.join(args.output_dir, "img.png"))
+        for j in range(nh):
+            display_instances(image, th_attn[j], fname=os.path.join(args.output_dir, "mask_th" + str(args.threshold) + "_head" + str(j) +".png"), blur=False)

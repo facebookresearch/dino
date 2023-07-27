@@ -1,4 +1,16 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+#     http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """
 Mostly copy-paste from timm library.
 https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
@@ -159,131 +171,76 @@ class VisionTransformer(nn.Module):
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
 
-    def forward(self, x):
-        # convert to list
-        if not isinstance(x, list):
-            x = [x]
-        # Perform forward pass separately on each resolution input.
-        # The inputs corresponding to a single resolution are clubbed and single
-        # forward is run on the same resolution inputs. Hence we do several
-        # forward passes = number of different resolutions used. We then
-        # concatenate all the output features.
-        idx_crops = torch.cumsum(torch.unique_consecutive(
-            torch.tensor([inp.shape[-1] for inp in x]),
-            return_counts=True,
-        )[1], 0)
-        start_idx = 0
-        for end_idx in idx_crops:
-            _out = self.forward_features(torch.cat(x[start_idx: end_idx]))
-            if start_idx == 0:
-                output = _out
-            else:
-                output = torch.cat((output, _out))
-            start_idx = end_idx
-        # Run the head forward on the concatenated features.
-        return self.head(output)
-
-    def forward_features(self, x):
-        B = x.shape[0]
-        x = self.patch_embed(x)
-
-        cls_tokens = self.cls_token.expand(B, -1, -1)
-        x = torch.cat((cls_tokens, x), dim=1)
-        pos_embed = self.interpolate_pos_encoding(x, self.pos_embed)
-        x = x + pos_embed
-        x = self.pos_drop(x)
-
-        for blk in self.blocks:
-            x = blk(x)
-        if self.norm is not None:
-            x = self.norm(x)
-
-        return x[:, 0]
-
-    def interpolate_pos_encoding(self, x, pos_embed):
+    def interpolate_pos_encoding(self, x, w, h):
         npatch = x.shape[1] - 1
-        N = pos_embed.shape[1] - 1
-        if npatch == N:
-            return pos_embed
-        class_emb = pos_embed[:, 0]
-        pos_embed = pos_embed[:, 1:]
-        dim = x.shape[-1]
-        pos_embed = nn.functional.interpolate(
-            pos_embed.reshape(1, int(math.sqrt(N)), int(math.sqrt(N)), dim).permute(0, 3, 1, 2),
-            scale_factor=math.sqrt(npatch / N),
-            mode='bicubic',
-        )
-        pos_embed = pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-        return torch.cat((class_emb.unsqueeze(0), pos_embed), dim=1)
-
-    def forward_selfattention(self, x):
-        B, nc, w, h = x.shape
         N = self.pos_embed.shape[1] - 1
-        x = self.patch_embed(x)
-
-        # interpolate patch embeddings
+        if npatch == N and w == h:
+            return self.pos_embed
+        class_pos_embed = self.pos_embed[:, 0]
+        patch_pos_embed = self.pos_embed[:, 1:]
         dim = x.shape[-1]
         w0 = w // self.patch_embed.patch_size
         h0 = h // self.patch_embed.patch_size
-        class_pos_embed = self.pos_embed[:, 0]
-        patch_pos_embed = self.pos_embed[:, 1:]
+        # we add a small number to avoid floating point error in the interpolation
+        # see discussion at https://github.com/facebookresearch/dino/issues/8
+        w0, h0 = w0 + 0.1, h0 + 0.1
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed.reshape(1, int(math.sqrt(N)), int(math.sqrt(N)), dim).permute(0, 3, 1, 2),
             scale_factor=(w0 / math.sqrt(N), h0 / math.sqrt(N)),
             mode='bicubic',
         )
-        if w0 != patch_pos_embed.shape[-2]:
-            helper = torch.zeros(h0)[None, None, None, :].repeat(1, dim, w0 - patch_pos_embed.shape[-2], 1).to(x.device)
-            patch_pos_embed = torch.cat((patch_pos_embed, helper), dim=-2)
-        if h0 != patch_pos_embed.shape[-1]:
-            helper = torch.zeros(w0)[None, None, :, None].repeat(1, dim, 1, h0 - patch_pos_embed.shape[-1]).to(x.device)
-            pos_embed = torch.cat((patch_pos_embed, helper), dim=-1)
+        assert int(w0) == patch_pos_embed.shape[-2] and int(h0) == patch_pos_embed.shape[-1]
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-        pos_embed = torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
+        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
+    def prepare_tokens(self, x):
+        B, nc, w, h = x.shape
+        x = self.patch_embed(x)  # patch linear embedding
+
+        # add the [CLS] token to the embed patch tokens
         cls_tokens = self.cls_token.expand(B, -1, -1)
         x = torch.cat((cls_tokens, x), dim=1)
-        x = x + pos_embed
-        x = self.pos_drop(x)
 
+        # add positional encoding to each token
+        x = x + self.interpolate_pos_encoding(x, w, h)
+
+        return self.pos_drop(x)
+
+    def forward(self, x):
+        x = self.prepare_tokens(x)
+        for blk in self.blocks:
+            x = blk(x)
+        x = self.norm(x)
+        return x[:, 0]
+
+    def get_last_selfattention(self, x):
+        x = self.prepare_tokens(x)
         for i, blk in enumerate(self.blocks):
             if i < len(self.blocks) - 1:
                 x = blk(x)
             else:
+                # return attention of the last block
                 return blk(x, return_attention=True)
 
-    def forward_return_n_last_blocks(self, x, n=1, return_patch_avgpool=False):
-        B = x.shape[0]
-        x = self.patch_embed(x)
-
-        cls_tokens = self.cls_token.expand(B, -1, -1)
-        x = torch.cat((cls_tokens, x), dim=1)
-        pos_embed = self.interpolate_pos_encoding(x, self.pos_embed)
-        x = x + pos_embed
-        x = self.pos_drop(x)
-
-        # we will return the [CLS] tokens from the `n` last blocks
+    def get_intermediate_layers(self, x, n=1):
+        x = self.prepare_tokens(x)
+        # we return the output tokens from the `n` last blocks
         output = []
         for i, blk in enumerate(self.blocks):
             x = blk(x)
             if len(self.blocks) - i <= n:
-                output.append(self.norm(x)[:, 0])
-        if return_patch_avgpool:
-            x = self.norm(x)
-            # In addition to the [CLS] tokens from the `n` last blocks, we also return 
-            # the patch tokens from the last block. This is useful for linear eval.
-            output.append(torch.mean(x[:, 1:], dim=1))
-        return torch.cat(output, dim=-1)
+                output.append(self.norm(x))
+        return output
 
 
-def deit_tiny(patch_size=16, **kwargs):
+def vit_tiny(patch_size=16, **kwargs):
     model = VisionTransformer(
         patch_size=patch_size, embed_dim=192, depth=12, num_heads=3, mlp_ratio=4,
         qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
 
-def deit_small(patch_size=16, **kwargs):
+def vit_small(patch_size=16, **kwargs):
     model = VisionTransformer(
         patch_size=patch_size, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4,
         qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)

@@ -1,4 +1,16 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+#     http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import os
 import argparse
 import json
@@ -10,6 +22,7 @@ import torch.distributed as dist
 import torch.backends.cudnn as cudnn
 from torchvision import datasets
 from torchvision import transforms as pth_transforms
+from torchvision import models as torchvision_models
 
 import utils
 import vision_transformer as vits
@@ -21,21 +34,61 @@ def eval_linear(args):
     print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
     cudnn.benchmark = True
 
+    # ============ building network ... ============
+    # if the network is a Vision Transformer (i.e. vit_tiny, vit_small, vit_base)
+    if args.arch in vits.__dict__.keys():
+        model = vits.__dict__[args.arch](patch_size=args.patch_size, num_classes=0)
+        embed_dim = model.embed_dim * (args.n_last_blocks + int(args.avgpool_patchtokens))
+    # if the network is a XCiT
+    elif "xcit" in args.arch:
+        model = torch.hub.load('facebookresearch/xcit:main', args.arch, num_classes=0)
+        embed_dim = model.embed_dim
+    # otherwise, we check if the architecture is in torchvision models
+    elif args.arch in torchvision_models.__dict__.keys():
+        model = torchvision_models.__dict__[args.arch]()
+        embed_dim = model.fc.weight.shape[1]
+        model.fc = nn.Identity()
+    else:
+        print(f"Unknow architecture: {args.arch}")
+        sys.exit(1)
+    model.cuda()
+    model.eval()
+    # load weights to evaluate
+    utils.load_pretrained_weights(model, args.pretrained_weights, args.checkpoint_key, args.arch, args.patch_size)
+    print(f"Model {args.arch} built.")
+
+    linear_classifier = LinearClassifier(embed_dim, num_labels=args.num_labels)
+    linear_classifier = linear_classifier.cuda()
+    linear_classifier = nn.parallel.DistributedDataParallel(linear_classifier, device_ids=[args.gpu])
+
     # ============ preparing data ... ============
-    train_transform = pth_transforms.Compose([
-        pth_transforms.RandomResizedCrop(224),
-        pth_transforms.RandomHorizontalFlip(),
-        pth_transforms.ToTensor(),
-        pth_transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-    ])
     val_transform = pth_transforms.Compose([
         pth_transforms.Resize(256, interpolation=3),
         pth_transforms.CenterCrop(224),
         pth_transforms.ToTensor(),
         pth_transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     ])
-    dataset_train = datasets.ImageFolder(os.path.join(args.data_path, "train"), transform=train_transform)
     dataset_val = datasets.ImageFolder(os.path.join(args.data_path, "val"), transform=val_transform)
+    val_loader = torch.utils.data.DataLoader(
+        dataset_val,
+        batch_size=args.batch_size_per_gpu,
+        num_workers=args.num_workers,
+        pin_memory=True,
+    )
+
+    if args.evaluate:
+        utils.load_pretrained_linear_weights(linear_classifier, args.arch, args.patch_size)
+        test_stats = validate_network(val_loader, model, linear_classifier, args.n_last_blocks, args.avgpool_patchtokens)
+        print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
+        return
+
+    train_transform = pth_transforms.Compose([
+        pth_transforms.RandomResizedCrop(224),
+        pth_transforms.RandomHorizontalFlip(),
+        pth_transforms.ToTensor(),
+        pth_transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+    ])
+    dataset_train = datasets.ImageFolder(os.path.join(args.data_path, "train"), transform=train_transform)
     sampler = torch.utils.data.distributed.DistributedSampler(dataset_train)
     train_loader = torch.utils.data.DataLoader(
         dataset_train,
@@ -44,25 +97,7 @@ def eval_linear(args):
         num_workers=args.num_workers,
         pin_memory=True,
     )
-    val_loader = torch.utils.data.DataLoader(
-        dataset_val,
-        batch_size=args.batch_size_per_gpu,
-        num_workers=args.num_workers,
-        pin_memory=True,
-    )
     print(f"Data loaded with {len(dataset_train)} train and {len(dataset_val)} val imgs.")
-
-    # ============ building network ... ============
-    model = vits.__dict__[args.arch](patch_size=args.patch_size, num_classes=0)
-    model.cuda()
-    model.eval()
-    print(f"Model {args.arch} {args.patch_size}x{args.patch_size} built.")
-    # load weights to evaluate
-    utils.load_pretrained_weights(model, args.pretrained_weights, args.checkpoint_key, args.arch, args.patch_size)
-
-    linear_classifier = LinearClassifier(model.embed_dim * (args.n_last_blocks + int(args.avgpool_patchtokens)), num_labels=args.num_labels)
-    linear_classifier = linear_classifier.cuda()
-    linear_classifier = nn.parallel.DistributedDataParallel(linear_classifier, device_ids=[args.gpu])
 
     # set optimizer
     optimizer = torch.optim.SGD(
@@ -127,7 +162,14 @@ def train(model, linear_classifier, optimizer, loader, epoch, n, avgpool):
 
         # forward
         with torch.no_grad():
-            output = model.forward_return_n_last_blocks(inp, n, avgpool)
+            if "vit" in args.arch:
+                intermediate_output = model.get_intermediate_layers(inp, n)
+                output = torch.cat([x[:, 0] for x in intermediate_output], dim=-1)
+                if avgpool:
+                    output = torch.cat((output.unsqueeze(-1), torch.mean(intermediate_output[-1][:, 1:], dim=1).unsqueeze(-1)), dim=-1)
+                    output = output.reshape(output.shape[0], -1)
+            else:
+                output = model(inp)
         output = linear_classifier(output)
 
         # compute cross entropy loss
@@ -160,8 +202,16 @@ def validate_network(val_loader, model, linear_classifier, n, avgpool):
         inp = inp.cuda(non_blocking=True)
         target = target.cuda(non_blocking=True)
 
-        # compute output
-        output = model.forward_return_n_last_blocks(inp, n, avgpool)
+        # forward
+        with torch.no_grad():
+            if "vit" in args.arch:
+                intermediate_output = model.get_intermediate_layers(inp, n)
+                output = torch.cat([x[:, 0] for x in intermediate_output], dim=-1)
+                if avgpool:
+                    output = torch.cat((output.unsqueeze(-1), torch.mean(intermediate_output[-1][:, 1:], dim=1).unsqueeze(-1)), dim=-1)
+                    output = output.reshape(output.shape[0], -1)
+            else:
+                output = model(inp)
         output = linear_classifier(output)
         loss = nn.CrossEntropyLoss()(output, target)
 
@@ -204,12 +254,11 @@ class LinearClassifier(nn.Module):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Evaluation with linear classification on ImageNet')
     parser.add_argument('--n_last_blocks', default=4, type=int, help="""Concatenate [CLS] tokens
-        for the `n` last blocks. We use `n=4` when evaluating DeiT-Small and `n=1` with ViT-Base.""")
+        for the `n` last blocks. We use `n=4` when evaluating ViT-Small and `n=1` with ViT-Base.""")
     parser.add_argument('--avgpool_patchtokens', default=False, type=utils.bool_flag,
         help="""Whether ot not to concatenate the global average pooled features to the [CLS] token.
-        We typically set this to False for DeiT-Small and to True with ViT-Base.""")
-    parser.add_argument('--arch', default='deit_small', type=str,
-        choices=['deit_tiny', 'deit_small', 'vit_base'], help='Architecture (support only ViT atm).')
+        We typically set this to False for ViT-Small and to True with ViT-Base.""")
+    parser.add_argument('--arch', default='vit_small', type=str, help='Architecture')
     parser.add_argument('--patch_size', default=16, type=int, help='Patch resolution of the model.')
     parser.add_argument('--pretrained_weights', default='', type=str, help="Path to pretrained weights to evaluate.")
     parser.add_argument("--checkpoint_key", default="teacher", type=str, help='Key to use in the checkpoint (example: "teacher")')
@@ -227,5 +276,6 @@ if __name__ == '__main__':
     parser.add_argument('--val_freq', default=1, type=int, help="Epoch frequency for validation.")
     parser.add_argument('--output_dir', default=".", help='Path to save logs and checkpoints')
     parser.add_argument('--num_labels', default=1000, type=int, help='Number of labels for linear classifier')
+    parser.add_argument('--evaluate', dest='evaluate', action='store_true', help='evaluate model on validation set')
     args = parser.parse_args()
     eval_linear(args)

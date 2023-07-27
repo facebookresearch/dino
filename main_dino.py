@@ -1,4 +1,16 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+#     http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import argparse
 import os
 import sys
@@ -30,21 +42,22 @@ def get_args_parser():
     parser = argparse.ArgumentParser('DINO', add_help=False)
 
     # Model parameters
-    parser.add_argument('--arch', default='deit_small', type=str,
-        choices=['deit_tiny', 'deit_small', 'vit_base'] + torchvision_archs,
+    parser.add_argument('--arch', default='vit_small', type=str,
+        choices=['vit_tiny', 'vit_small', 'vit_base', 'xcit', 'deit_tiny', 'deit_small'] \
+                + torchvision_archs + torch.hub.list("facebookresearch/xcit:main"),
         help="""Name of architecture to train. For quick experiments with ViTs,
-        we recommend using deit_tiny or deit_small.""")
+        we recommend using vit_tiny or vit_small.""")
     parser.add_argument('--patch_size', default=16, type=int, help="""Size in pixels
         of input square patches - default 16 (for 16x16 patches). Using smaller
         values leads to better performance but requires more memory. Applies only
-        for ViTs (deit_tiny, deit_small and vit_base). If <16, we recommend disabling
+        for ViTs (vit_tiny, vit_small and vit_base). If <16, we recommend disabling
         mixed precision training (--use_fp16 false) to avoid unstabilities.""")
     parser.add_argument('--out_dim', default=65536, type=int, help="""Dimensionality of
         the DINO head output. For complex and large datasets large values (like 65k) work well.""")
     parser.add_argument('--norm_last_layer', default=True, type=utils.bool_flag,
         help="""Whether or not to weight normalize the last layer of the DINO head.
         Not normalizing leads to better performance but can make the training unstable.
-        In our experiments, we typically set this paramater to False with deit_small and True with vit_base.""")
+        In our experiments, we typically set this paramater to False with vit_small and True with vit_base.""")
     parser.add_argument('--momentum_teacher', default=0.996, type=float, help="""Base EMA
         parameter for teacher update. The value is increased to 1 during training with cosine schedule.
         We recommend setting a higher value with small batches: for example use 0.9995 with batch size of 256.""")
@@ -89,6 +102,7 @@ def get_args_parser():
         end of optimization. We use a cosine LR schedule with linear warmup.""")
     parser.add_argument('--optimizer', default='adamw', type=str,
         choices=['adamw', 'sgd', 'lars'], help="""Type of optimizer. We recommend using adamw with ViTs.""")
+    parser.add_argument('--drop_path_rate', type=float, default=0.1, help="stochastic depth rate")
 
     # Multi-crop parameters
     parser.add_argument('--global_crops_scale', type=float, nargs='+', default=(0.4, 1.),
@@ -141,39 +155,41 @@ def train_dino(args):
     print(f"Data loaded: there are {len(dataset)} images.")
 
     # ============ building student and teacher networks ... ============
-    # if the network is a vision transformer (i.e. deit_tiny, deit_small, vit_base)
+    # we changed the name DeiT-S for ViT-S to avoid confusions
+    args.arch = args.arch.replace("deit", "vit")
+    # if the network is a Vision Transformer (i.e. vit_tiny, vit_small, vit_base)
     if args.arch in vits.__dict__.keys():
         student = vits.__dict__[args.arch](
             patch_size=args.patch_size,
-            drop_path_rate=0.1,  # stochastic depth
+            drop_path_rate=args.drop_path_rate,  # stochastic depth
         )
         teacher = vits.__dict__[args.arch](patch_size=args.patch_size)
-        student.head = DINOHead(
-            student.embed_dim,
-            args.out_dim,
-            use_bn=args.use_bn_in_head,
-            norm_last_layer=args.norm_last_layer,
-        )
-        teacher.head = DINOHead(teacher.embed_dim, args.out_dim, args.use_bn_in_head)
-
+        embed_dim = student.embed_dim
+    # if the network is a XCiT
+    elif args.arch in torch.hub.list("facebookresearch/xcit:main"):
+        student = torch.hub.load('facebookresearch/xcit:main', args.arch,
+                                 pretrained=False, drop_path_rate=args.drop_path_rate)
+        teacher = torch.hub.load('facebookresearch/xcit:main', args.arch, pretrained=False)
+        embed_dim = student.embed_dim
     # otherwise, we check if the architecture is in torchvision models
     elif args.arch in torchvision_models.__dict__.keys():
         student = torchvision_models.__dict__[args.arch]()
         teacher = torchvision_models.__dict__[args.arch]()
         embed_dim = student.fc.weight.shape[1]
-        student = utils.MultiCropWrapper(student, DINOHead(
-            embed_dim,
-            args.out_dim,
-            use_bn=args.use_bn_in_head,
-            norm_last_layer=args.norm_last_layer,
-        ))
-        teacher = utils.MultiCropWrapper(
-            teacher,
-            DINOHead(embed_dim, args.out_dim, args.use_bn_in_head),
-        )
     else:
         print(f"Unknow architecture: {args.arch}")
 
+    # multi-crop wrapper handles forward with inputs of different resolutions
+    student = utils.MultiCropWrapper(student, DINOHead(
+        embed_dim,
+        args.out_dim,
+        use_bn=args.use_bn_in_head,
+        norm_last_layer=args.norm_last_layer,
+    ))
+    teacher = utils.MultiCropWrapper(
+        teacher,
+        DINOHead(embed_dim, args.out_dim, args.use_bn_in_head),
+    )
     # move networks to gpu
     student, teacher = student.cuda(), teacher.cuda()
     # synchronize batch norms (if any)
@@ -313,7 +329,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         if fp16_scaler is None:
             loss.backward()
             if args.clip_grad:
-                param_norms = utils.clip_gradients(model, args.clip_grad)
+                param_norms = utils.clip_gradients(student, args.clip_grad)
             utils.cancel_gradients_last_layer(epoch, student,
                                               args.freeze_last_layer)
             optimizer.step()

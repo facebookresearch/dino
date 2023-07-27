@@ -1,5 +1,18 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+#     http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import os
+import sys
 import argparse
 
 import torch
@@ -8,6 +21,7 @@ import torch.distributed as dist
 import torch.backends.cudnn as cudnn
 from torchvision import datasets
 from torchvision import transforms as pth_transforms
+from torchvision import models as torchvision_models
 
 import utils
 import vision_transformer as vits
@@ -42,17 +56,26 @@ def extract_feature_pipeline(args):
     print(f"Data loaded with {len(dataset_train)} train and {len(dataset_val)} val imgs.")
 
     # ============ building network ... ============
-    model = vits.__dict__[args.arch](patch_size=args.patch_size, num_classes=0)
-    print(f"Model {args.arch} {args.patch_size}x{args.patch_size} built.")
+    if "vit" in args.arch:
+        model = vits.__dict__[args.arch](patch_size=args.patch_size, num_classes=0)
+        print(f"Model {args.arch} {args.patch_size}x{args.patch_size} built.")
+    elif "xcit" in args.arch:
+        model = torch.hub.load('facebookresearch/xcit:main', args.arch, num_classes=0)
+    elif args.arch in torchvision_models.__dict__.keys():
+        model = torchvision_models.__dict__[args.arch](num_classes=0)
+        model.fc = nn.Identity()
+    else:
+        print(f"Architecture {args.arch} non supported")
+        sys.exit(1)
     model.cuda()
     utils.load_pretrained_weights(model, args.pretrained_weights, args.checkpoint_key, args.arch, args.patch_size)
     model.eval()
 
     # ============ extract features ... ============
     print("Extracting features for train set...")
-    train_features = extract_features(model, data_loader_train)
+    train_features = extract_features(model, data_loader_train, args.use_cuda)
     print("Extracting features for val set...")
-    test_features = extract_features(model, data_loader_val)
+    test_features = extract_features(model, data_loader_val, args.use_cuda)
 
     if utils.get_rank() == 0:
         train_features = nn.functional.normalize(train_features, dim=1, p=2)
@@ -70,18 +93,21 @@ def extract_feature_pipeline(args):
 
 
 @torch.no_grad()
-def extract_features(model, data_loader):
+def extract_features(model, data_loader, use_cuda=True, multiscale=False):
     metric_logger = utils.MetricLogger(delimiter="  ")
     features = None
     for samples, index in metric_logger.log_every(data_loader, 10):
         samples = samples.cuda(non_blocking=True)
         index = index.cuda(non_blocking=True)
-        feats = model(samples).clone()
+        if multiscale:
+            feats = utils.multi_scale(samples, model)
+        else:
+            feats = model(samples).clone()
 
         # init storage feature matrix
         if dist.get_rank() == 0 and features is None:
             features = torch.zeros(len(data_loader.dataset), feats.shape[-1])
-            if args.use_cuda:
+            if use_cuda:
                 features = features.cuda(non_blocking=True)
             print(f"Storing features into tensor of shape {features.shape}")
 
@@ -106,7 +132,7 @@ def extract_features(model, data_loader):
 
         # update storage feature matrix
         if dist.get_rank() == 0:
-            if args.use_cuda:
+            if use_cuda:
                 features.index_copy_(0, index_all, torch.cat(output_l))
             else:
                 features.index_copy_(0, index_all.cpu(), torch.cat(output_l).cpu())
@@ -119,7 +145,7 @@ def knn_classifier(train_features, train_labels, test_features, test_labels, k, 
     train_features = train_features.t()
     num_test_images, num_chunks = test_labels.shape[0], 100
     imgs_per_chunk = num_test_images // num_chunks
-    retrieval_one_hot = torch.zeros(k, num_classes).cuda()
+    retrieval_one_hot = torch.zeros(k, num_classes).to(train_features.device)
     for idx in range(0, num_test_images, imgs_per_chunk):
         # get the features for test images
         features = test_features[
@@ -149,7 +175,7 @@ def knn_classifier(train_features, train_labels, test_features, test_labels, k, 
         # find the predictions that match the target
         correct = predictions.eq(targets.data.view(-1, 1))
         top1 = top1 + correct.narrow(1, 0, 1).sum().item()
-        top5 = top5 + correct.narrow(1, 0, 5).sum().item()
+        top5 = top5 + correct.narrow(1, 0, min(5, k)).sum().item()  # top5 does not make sense if k < 5
         total += targets.size(0)
     top1 = top1 * 100.0 / total
     top5 = top5 * 100.0 / total
@@ -172,8 +198,7 @@ if __name__ == '__main__':
     parser.add_argument('--pretrained_weights', default='', type=str, help="Path to pretrained weights to evaluate.")
     parser.add_argument('--use_cuda', default=True, type=utils.bool_flag,
         help="Should we store the features on GPU? We recommend setting this to False if you encounter OOM")
-    parser.add_argument('--arch', default='deit_small', type=str,
-        choices=['deit_tiny', 'deit_small', 'vit_base'], help='Architecture (support only ViT atm).')
+    parser.add_argument('--arch', default='vit_small', type=str, help='Architecture')
     parser.add_argument('--patch_size', default=16, type=int, help='Patch resolution of the model.')
     parser.add_argument("--checkpoint_key", default="teacher", type=str,
         help='Key to use in the checkpoint (example: "teacher")')
