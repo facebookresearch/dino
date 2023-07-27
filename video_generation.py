@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import os
 import glob
 import sys
@@ -258,8 +259,10 @@ class VideoGenerator:
                 )
                 state_dict = state_dict[self.args.checkpoint_key]
             state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+
             # remove `backbone.` prefix induced by multicrop wrapper
             state_dict = {k.replace("backbone.", ""): v for k, v in state_dict.items()}
+
             msg = model.load_state_dict(state_dict, strict=False)
             print(
                 "Pretrained weights found at {} and loaded with msg: {}".format(
@@ -271,6 +274,7 @@ class VideoGenerator:
                 "Please use the `--pretrained_weights` argument to indicate the path of the checkpoint to evaluate."
             )
             url = None
+
             if self.args.arch == "vit_small" and self.args.patch_size == 16:
                 url = "dino_deitsmall16_pretrain/dino_deitsmall16_pretrain.pth"
             elif self.args.arch == "vit_small" and self.args.patch_size == 8:

@@ -223,6 +223,7 @@ You can generate videos like the one on the blog post with `video_generation.py`
 https://user-images.githubusercontent.com/46140458/116817761-47885e80-ab68-11eb-9975-d61d5a919e13.mp4
 
 Extract frames from input video and generate attention video:
+
 ```
 python video_generation.py  --pretrained_weights dino_deitsmall8_pretrain.pth \
     --input_path input/video.mp4 \
@@ -245,7 +246,6 @@ python video_generation.py --input_path output/attention \
     --video_only \
     --video_format avi
 ```
-
 
 ## Evaluation: k-NN classification on ImageNet
 To evaluate a simple k-NN classifier with a single GPU on a pre-trained model, run:
