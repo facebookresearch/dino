@@ -354,6 +354,7 @@ class MetricLogger(object):
         iter_time = SmoothedValue(fmt='{avg:.6f}')
         data_time = SmoothedValue(fmt='{avg:.6f}')
         space_fmt = ':' + str(len(str(len(iterable)))) + 'd'
+        print('in log every')
         if torch.cuda.is_available():
             log_msg = self.delimiter.join([
                 header,
@@ -374,7 +375,9 @@ class MetricLogger(object):
                 'data: {data}'
             ])
         MB = 1024.0 * 1024.0
+        print('before log every for loop')
         for obj in iterable:
+            print('in log every for loop')
             data_time.update(time.time() - end)
             yield obj
             iter_time.update(time.time() - end)

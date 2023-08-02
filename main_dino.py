@@ -29,10 +29,13 @@ import torch.backends.cudnn as cudnn
 import torch.nn.functional as F
 from torchvision import datasets, transforms
 from torchvision import models as torchvision_models
+from tqdm import tqdm
 
 import utils
 import vision_transformer as vits
 from vision_transformer import DINOHead
+
+from nifti_datahandling import NiftiDataset
 
 torchvision_archs = sorted(name for name in torchvision_models.__dict__
     if name.islower() and not name.startswith("__")
@@ -117,8 +120,8 @@ def get_args_parser():
         Used for small local view cropping of multi-crop.""")
 
     # Misc
-    parser.add_argument('--data_path', default='/path/to/imagenet/train/', type=str,
-        help='Please specify path to the ImageNet training data.')
+    parser.add_argument('--data_path', default='/run/user/1000/gvfs/smb-share:server=srvfs1.local,share=imagelibrary/Nifti_Database', type=str,
+        help='Please specify path to the Nifti training data.')
     parser.add_argument('--output_dir', default=".", type=str, help='Path to save logs and checkpoints.')
     parser.add_argument('--saveckp_freq', default=20, type=int, help='Save checkpoint every x epochs.')
     parser.add_argument('--seed', default=0, type=int, help='Random seed.')
@@ -127,6 +130,14 @@ def get_args_parser():
         distributed training; see https://pytorch.org/docs/stable/distributed.html""")
     parser.add_argument("--local_rank", default=0, type=int, help="Please ignore and do not set this argument.")
     return parser
+
+
+def collate_fn(batch):
+    # Filter out corrupt samples (None values)
+    batch = [data for data in batch if data is not None]
+
+    # Use default_collate to handle the rest of the batch creation
+    return torch.utils.data.dataloader.default_collate(batch)
 
 
 def train_dino(args):
@@ -142,8 +153,9 @@ def train_dino(args):
         args.local_crops_scale,
         args.local_crops_number,
     )
-    dataset = datasets.ImageFolder(args.data_path, transform=transform)
+    dataset = NiftiDataset(args.data_path)
     sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
+    # sampler = torch.utils.data.SubsetRandomSampler(torch.randint(high=len(dataset), size=(10,)))
     data_loader = torch.utils.data.DataLoader(
         dataset,
         sampler=sampler,
@@ -151,6 +163,7 @@ def train_dino(args):
         num_workers=args.num_workers,
         pin_memory=True,
         drop_last=True,
+        collate_fn=collate_fn
     )
     print(f"Data loaded: there are {len(dataset)} images.")
 
@@ -267,7 +280,8 @@ def train_dino(args):
     start_time = time.time()
     print("Starting DINO training !")
     for epoch in range(start_epoch, args.epochs):
-        data_loader.sampler.set_epoch(epoch)
+        print(f'##################epoch {epoch}#########################')
+        # data_loader.sampler.set_epoch(epoch)
 
         # ============ training one epoch of DINO ... ============
         train_stats = train_one_epoch(student, teacher, teacher_without_ddp, dino_loss,
@@ -304,6 +318,7 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
     for it, (images, _) in enumerate(metric_logger.log_every(data_loader, 10, header)):
+        print(it)
         # update weight decay and learning rate according to their schedule
         it = len(data_loader) * epoch + it  # global training iteration
         for i, param_group in enumerate(optimizer.param_groups):
