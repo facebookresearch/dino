@@ -98,7 +98,7 @@ class NumpyDatasetEval(Dataset):
     """
     Dataset that uses numpy arrays of shape x,y,3 that have been sampled from DICOM files.
     """
-    def __init__(self, root_dir, transform=None, paths_text: str = "eval_paths.txt"):
+    def __init__(self, root_dir, transform=None, paths_text: str = "phase_no_none_test.txt"):
         self.root_dir = root_dir
         with open(os.path.join(self.root_dir, paths_text), 'r') as f:
             self.file_list = f.readlines()
