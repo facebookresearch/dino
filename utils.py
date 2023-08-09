@@ -183,6 +183,8 @@ def restart_from_checkpoint(ckp_path, run_variables=None, **kwargs):
             if var_name in checkpoint:
                 run_variables[var_name] = checkpoint[var_name]
 
+    return True
+
 
 def cosine_scheduler(base_value, final_value, epochs, niter_per_ep, warmup_epochs=0, start_warmup_value=0):
     warmup_schedule = np.array([])

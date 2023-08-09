@@ -136,6 +136,8 @@ class NumpyDatasetEval(Dataset):
         return sample
 
 
+
+
 class ResampleNoneSampler(Sampler):
     def __init__(self, dataset, replacement=True):
         self.dataset = dataset
@@ -174,6 +176,15 @@ class ResizeTo512:
         image = image.unsqueeze(0).unsqueeze(0)  # Add batch and channel dimensions
         resized_image = torch.nn.functional.interpolate(image, size=(512, 512, 3), mode='trilinear', align_corners=False)
         return resized_image[0, 0].numpy()
+
+class ResizeTo512SameSlice:
+    def __call__(self, image):
+        # Rescale the image to 512x512 using bilinear interpolation
+        image = torch.tensor(np.stack([image[:, :, 1]] * 3, axis=0))
+        image = image.unsqueeze(0).unsqueeze(0)  # Add batch and channel dimensions
+        resized_image = torch.nn.functional.interpolate(image, size=(512, 512, 3), mode='trilinear', align_corners=False)
+        return resized_image[0, 0].numpy()
+
 
 class ToPILImage:
     def __call__(self, array):

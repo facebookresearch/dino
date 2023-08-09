@@ -73,7 +73,7 @@ def run_visualization(args):
     utils.load_pretrained_weights(model, args.pretrained_weights, args.checkpoint_key, args.arch, args.patch_size)
     model.eval()
 
-    dataset = NumpyDatasetEval(args.data_path)
+    dataset = NumpyDatasetEval(args.data_path, paths_text=args.dataset_file)
     data_loader = torch.utils.data.DataLoader(
         dataset,
         batch_size=args.batch_size_per_gpu,
@@ -94,6 +94,7 @@ if __name__ == '__main__':
     parser.add_argument("--checkpoint_key", default="teacher", type=str,
                         help='Key to use in the checkpoint (example: "teacher")')
     parser.add_argument('--data_path', default='/home/edan/HighRad/Data/DicomClassifier/phase_dataset/phase_numpy_dataset/', type=str)
+    parser.add_argument('--dataset_file', default='modality_test.txt', type=str)
     parser.add_argument('--num_workers', default=8, type=int, help='Number of data loading workers per GPU.')
     args = parser.parse_args()
     run_visualization(args)
