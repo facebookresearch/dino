@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
+import copy
 import os
 import sys
 import datetime
@@ -35,6 +36,7 @@ import utils
 import vision_transformer as vits
 from vision_transformer import DINOHead
 
+from new_knn_for_dino import DinoKNN
 from nifti_datahandling import NiftiDataset, ResampleNoneSampler, NumpyDataset
 
 torchvision_archs = sorted(name for name in torchvision_models.__dict__
@@ -123,6 +125,8 @@ def get_args_parser():
     parser.add_argument('--data_path', default='/home/edan/HighRad/Data/DicomClassifier/', type=str,
         help='Please specify path to the Nifti training data.')
     parser.add_argument('--output_dir', default=".", type=str, help='Path to save logs and checkpoints.')
+    parser.add_argument('--eval_file', default="modality_test.txt", type=str, help='Path to evaluation dataset list.')
+    parser.add_argument('--eval_data_path', default="/home/edan/HighRad/Data/DicomClassifier/", type=str, help='Path to evaluation dataset list.')
     parser.add_argument('--saveckp_freq', default=20, type=int, help='Save checkpoint every x epochs.')
     parser.add_argument('--seed', default=0, type=int, help='Random seed.')
     parser.add_argument('--num_workers', default=10, type=int, help='Number of data loading workers per GPU.')
@@ -268,7 +272,10 @@ def train_dino(args):
     )
     start_epoch = to_restore["epoch"]
     if continue_training:
-        pass
+
+        # First evaluation
+        model = copy.deepcopy(teacher.backbone)
+        evaluate_knn(args, model, args.eval_data_path, k=5, kfold=5)
 
     start_time = time.time()
     print("Starting DINO training !")
@@ -300,6 +307,11 @@ def train_dino(args):
         if utils.is_main_process():
             with (Path(args.output_dir) / "log.txt").open("a") as f:
                 f.write(json.dumps(log_stats) + "\n")
+
+        # Evaluate with KNN:
+        model = copy.deepcopy(teacher.backbone)
+        evaluate_knn(args, model, args.eval_data_path, k=5, kfold=5)
+
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))
@@ -470,6 +482,15 @@ class DataAugmentationDINO(object):
             crops.append(self.local_transfo(image))
         return crops
 
+
+def evaluate_knn(args, model, data_path, k, kfold):
+    knn = DinoKNN(model, data_path, k, kfold)
+    logs = knn.predict_knn(args)
+    print(logs)
+    total_recall = np.average([tup[0] for tup in logs])
+    total_precision = np.average([tup[1] for tup in logs])
+    print(f'average recall over 5 fold validation: {total_recall}')
+    print(f'average precision over 5 fold validation: {total_precision}')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('DINO', parents=[get_args_parser()])

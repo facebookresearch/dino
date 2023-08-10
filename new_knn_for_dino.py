@@ -44,7 +44,8 @@ class DinoKNN:
 
         device = next(self.model.parameters()).device
         # For each data point, preprocess and get an embedding
-        dataset = NumpyDatasetEval(self.data, paths_text=args.dataset_file)
+        dataset = NumpyDatasetEval(self.data, paths_text=args.eval_file)
+        print(f'testing {args.eval_file}')
         data_loader = torch.utils.data.DataLoader(
             dataset,
             batch_size=args.batch_size_per_gpu,
@@ -71,8 +72,8 @@ class DinoKNN:
         for i, (train_indices, val_indices) in enumerate(kf.split(embeddings)):
             neighbors = KNeighborsClassifier(n_neighbors=self.k).fit(embeddings[train_indices], labels[train_indices])
             predictions = neighbors.predict(embeddings[val_indices])
-            precision = precision_score(labels[val_indices], predictions)
-            recall = recall_score(labels[val_indices], predictions)
+            precision = precision_score(labels[val_indices], predictions, average="macro")
+            recall = recall_score(labels[val_indices], predictions, average="macro")
             scores.append((recall, precision))
 
         # Return a log of the results as a dictionary
@@ -113,8 +114,8 @@ if __name__ == '__main__':
     parser.add_argument('--patch_size', default=16, type=int, help='Patch resolution of the model.')
     parser.add_argument("--checkpoint_key", default="teacher", type=str,
                         help='Key to use in the checkpoint (example: "teacher")')
-    parser.add_argument('--data_path', default='/home/edan/HighRad/Data/DicomClassifier/', type=str)
-    parser.add_argument('--dataset_file', default='modality_test.txt', type=str)
+    parser.add_argument('--data_path', default='/home/edan/HighRad/Data/DicomClassifier/val_dataset', type=str)
+    parser.add_argument('--eval_file', default='val_dataset.txt', type=str)
     parser.add_argument('--num_workers', default=8, type=int, help='Number of data loading workers per GPU.')
     args = parser.parse_args()
     run_knn(args)
