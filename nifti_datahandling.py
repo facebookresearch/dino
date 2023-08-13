@@ -104,7 +104,7 @@ class NumpyDatasetEval(Dataset):
             self.file_list = f.readlines()
             self.file_list = [os.path.join(self.root_dir, file.strip()) for file in self.file_list]
             self.transform = transforms.Compose([
-                ResizeTo512(),
+                ResizeToX(512),
                 CTWindowing(),
                 ZScoreNormalization(),
                 ToPILImage(),
@@ -118,7 +118,7 @@ class NumpyDatasetEval(Dataset):
                 ])
 
             self.resize_and_tensor_transform = transforms.Compose([
-                ResizeTo512(),
+                ResizeToX(128),
                 transforms.ToTensor(),
                 ])
 
@@ -127,7 +127,10 @@ class NumpyDatasetEval(Dataset):
 
     def __getitem__(self, idx):
         file_name = os.path.join(self.root_dir, self.file_list[idx])
-        data_array = np.load(file_name)
+        if file_name.endswith('npz'):
+            data_array = np.load(file_name)['arr_0.npy']
+        else:
+            data_array = np.load(file_name)
         display_arr = self.resize_and_tensor_transform(data_array)
         # Apply the default transform to the sampled slice
         transformed_arr = self.transform(data_array)
@@ -169,12 +172,16 @@ class ToTensor:
     def __call__(self, image):
         return torch.from_numpy(image).float()
 
-class ResizeTo512:
+class ResizeToX:
+
+    def __init__(self, x:int):
+        self.x = x
+
     def __call__(self, image):
         # Rescale the image to 512x512 using bilinear interpolation
         image = torch.tensor(image)
         image = image.unsqueeze(0).unsqueeze(0)  # Add batch and channel dimensions
-        resized_image = torch.nn.functional.interpolate(image, size=(512, 512, 3), mode='trilinear', align_corners=False)
+        resized_image = torch.nn.functional.interpolate(image, size=(self.x, self.x, 3), mode='trilinear', align_corners=False)
         return resized_image[0, 0].numpy()
 
 class ResizeTo512SameSlice:

@@ -93,8 +93,8 @@ if __name__ == '__main__':
     parser.add_argument('--patch_size', default=16, type=int, help='Patch resolution of the model.')
     parser.add_argument("--checkpoint_key", default="teacher", type=str,
                         help='Key to use in the checkpoint (example: "teacher")')
-    parser.add_argument('--data_path', default='/home/edan/HighRad/Data/DicomClassifier/phase_dataset/phase_numpy_dataset/', type=str)
-    parser.add_argument('--dataset_file', default='modality_test.txt', type=str)
+    parser.add_argument('--data_path', default='/home/edan/HighRad/Data/DicomClassifier/large_lungs_and_liver_test_set/', type=str)
+    parser.add_argument('--dataset_file', default='test_files.txt', type=str)
     parser.add_argument('--num_workers', default=8, type=int, help='Number of data loading workers per GPU.')
     args = parser.parse_args()
     run_visualization(args)
