@@ -17,7 +17,7 @@ class NiftiDataset(Dataset):
             self.file_list = f.readlines()
             self.file_list = [os.path.join(self.root_dir, file.strip()) for file in self.file_list]
             self.transform = transforms.Compose([
-                ResizeTo512(),
+                ResizeToX(512),
                 ZScoreNormalization(),
                 ToPILImage(),
             ])
@@ -73,7 +73,7 @@ class NumpyDataset(Dataset):
             self.file_list = f.readlines()
             self.file_list = [os.path.join(self.root_dir, file.strip()) for file in self.file_list]
             self.transform = transforms.Compose([
-                ResizeTo512(),
+                ResizeToX(512),
                 CTWindowing(),
                 ZScoreNormalization(),
                 ToPILImage(),
@@ -138,6 +138,146 @@ class NumpyDatasetEval(Dataset):
         sample = (transformed_arr, label, display_arr)
         return sample
 
+
+class NumpyDatasetAllModalities(Dataset):
+    """
+    Dataset that uses numpy arrays of shape x,y,3 that have been sampled from DICOM files.
+    The dataset can either contain images from MRI or CT scans which need to be transformed slightly
+    differently.
+
+    Currently, the way to know which modality is used is according to the dataset path itself,
+    this may change in the future.
+    """
+    def __init__(self, root_dir, transform=None, paths_text: str = "phase_no_none_test.txt"):
+        self.root_dir = root_dir
+        with open(os.path.join(self.root_dir, paths_text), 'r') as f:
+            self.file_list = f.readlines()
+            self.file_list = [os.path.join(self.root_dir, file.strip()) for file in self.file_list]
+            self.ct_transform = transforms.Compose([
+                ResizeToX(512),
+                CTWindowing(),
+                ZScoreNormalization(),
+                ToPILImage(),
+
+            ])
+            self.mri_transform = transforms.Compose([
+                ResizeToX(512),
+                ZScoreNormalization(),
+                ToPILImage(),
+            ])
+
+
+            if transform:
+                self.ct_transform = transforms.Compose([
+                    self.ct_transform,
+                    transform
+                ])
+                self.mri_transform = transforms.Compose([
+                    self.mri_transform,
+                    transform
+                ])
+
+            self.resize_and_tensor_transform = transforms.Compose([
+                ResizeToX(128),
+                transforms.ToTensor(),
+                ])
+
+    def __len__(self):
+        return len(self.file_list)
+
+    def __getitem__(self, idx):
+        file_name = os.path.join(self.root_dir, self.file_list[idx])
+        if file_name.endswith('npz'):
+            data_array = np.load(file_name)['arr_0.npy']
+        else:
+            data_array = np.load(file_name)
+        # Apply the default transform to the sampled slice
+        label = file_name.split('/')[-3]
+
+        #TODO this is obviously a bad solution because these labels tend to change. find a better solution?
+        if label == "Brain":
+            transform = self.mri_transform
+        elif label == "Lungs" or label == "Liver":
+            transform = self.ct_transform
+        else:
+            raise ValueError("unclear label being used")
+        transformed_arr = transform(data_array)
+        sample = (transformed_arr, 0)
+        return sample
+
+class NumpyDatasetEvalAllModalities(Dataset):
+    """
+    Dataset that uses numpy arrays of shape x,y,3 that have been sampled from DICOM files.
+    The dataset can either contain images from MRI or CT scans which need to be transformed slightly
+    differently.
+
+    Currently, the way to know which modality is used is according to the dataset path itself,
+    this may change in the future.
+    """
+    def __init__(self, root_dir, transform=None, paths_text: str = "phase_no_none_test.txt"):
+        self.root_dir = root_dir
+        with open(os.path.join(self.root_dir, paths_text), 'r') as f:
+            self.file_list = f.readlines()
+            self.file_list = [os.path.join(self.root_dir, file.strip()) for file in self.file_list]
+            self.ct_transform = transforms.Compose([
+                ResizeToX(512),
+                CTWindowing(),
+                ZScoreNormalization(),
+                ToPILImage(),
+                transforms.ToTensor()
+
+            ])
+            self.mri_transform = transforms.Compose([
+                ResizeToX(512),
+                ZScoreNormalization(),
+                ToPILImage(),
+                transforms.ToTensor()
+            ])
+
+
+            if transform:
+                self.ct_transform = transforms.Compose([
+                    self.ct_transform,
+                    transform
+                ])
+                self.mri_transform = transforms.Compose([
+                    self.mri_transform,
+                    transform
+                ])
+
+            self.resize_and_tensor_transform = transforms.Compose([
+                ResizeToX(64),
+                transforms.ToTensor(),
+                ])
+
+    def __len__(self):
+        return len(self.file_list)
+
+    def __getitem__(self, idx):
+        file_name = os.path.join(self.root_dir, self.file_list[idx])
+        if file_name.endswith('npz'):
+            data_array = np.load(file_name)['arr_0.npy']
+        else:
+            data_array = np.load(file_name)
+        try:
+            display_arr = self.resize_and_tensor_transform(data_array)
+        except Exception as e:
+            print(e)
+            print(f"problem file is {file_name}")
+            raise e
+        # Apply the default transform to the sampled slice
+        label = file_name.split('/')[-3]
+
+        #TODO this is obviously a bad solution because these labels tend to change. find a better solution?
+        if label == "Brain":
+            transform = self.mri_transform
+        elif label == "Lungs" or label == "Liver":
+            transform = self.ct_transform
+        else:
+            raise ValueError("unclear label being used")
+        transformed_arr = transform(data_array)
+        sample = (transformed_arr, label, display_arr)
+        return sample
 
 
 
@@ -208,4 +348,37 @@ class CTWindowing:
         median = np.median(array)
         array[np.where(array < -300)] = median
         array[np.where(array > 300)] = median
+        return array
+
+
+class MRINormalization:
+
+    def __call__(self, array):
+
+        # find background by first getting rid of small values close to 0 that are likely to be the background
+
+        # get rid of low value outliers
+        x = np.clip(array, a_min=0, a_max=None)
+
+        # min max norm and discard very small values
+        normalized_min_max = (x - x.min()) / (x.max() - x.min() + 0.001)
+        x[normalized_min_max < 0.01] = np.nan
+
+        # quantile standardization to get rid of large outliers
+
+        quantile_data = (x - np.nanmedian(x)) / (np.nanquantile(x, 0.75) - np.nanquantile(x, 0.25) + 0.001)
+        quantile_data[np.logical_or(-1 >= quantile_data, quantile_data >= 1)] = np.nan
+
+        # now we can safely z-score normalize the image.
+        mean = np.nanmean(quantile_data)
+        std = np.nanstd(quantile_data)
+
+        #clip data and then normalize
+        x = (x - np.nanmedian(x)) / (np.nanquantile(x, 0.75) - np.nanquantile(x, 0.25) + 0.001)
+        x[-1 >= quantile_data] = -1
+        x[quantile_data >= 1] = 1
+        x[np.isnan(x)] = -1
+        x = (x - mean) / (std + 0.0001)
+        x = (x - x.min()) / (x.max() - x.min() + 0.0001)
+        array = x
         return array

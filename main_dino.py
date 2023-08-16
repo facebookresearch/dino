@@ -37,7 +37,7 @@ import vision_transformer as vits
 from vision_transformer import DINOHead
 
 from new_knn_for_dino import DinoKNN
-from nifti_datahandling import NiftiDataset, ResampleNoneSampler, NumpyDataset
+from nifti_datahandling import NiftiDataset, ResampleNoneSampler, NumpyDataset, NumpyDatasetAllModalities
 
 torchvision_archs = sorted(name for name in torchvision_models.__dict__
     if name.islower() and not name.startswith("__")
@@ -149,7 +149,8 @@ def train_dino(args):
         args.local_crops_scale,
         args.local_crops_number,
     )
-    dataset = NumpyDataset(args.data_path, transform=transform)
+    # dataset = NumpyDataset(args.data_path, transform=transform)
+    dataset = NumpyDatasetAllModalities(args.data_path, transform=transform, paths_text=args.eval_file)
     # sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
     sampler = ResampleNoneSampler(dataset)
     data_loader = torch.utils.data.DataLoader(

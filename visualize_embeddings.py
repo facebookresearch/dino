@@ -9,7 +9,7 @@ import sys
 from torch.utils.tensorboard import SummaryWriter
 import vision_transformer as vits
 import utils
-from nifti_datahandling import NumpyDatasetEval
+from nifti_datahandling import NumpyDatasetEval, NumpyDatasetEvalAllModalities
 from torchvision import models as torchvision_models
 
 
@@ -73,7 +73,7 @@ def run_visualization(args):
     utils.load_pretrained_weights(model, args.pretrained_weights, args.checkpoint_key, args.arch, args.patch_size)
     model.eval()
 
-    dataset = NumpyDatasetEval(args.data_path, paths_text=args.dataset_file)
+    dataset = NumpyDatasetEvalAllModalities(args.data_path, paths_text=args.dataset_file)
     data_loader = torch.utils.data.DataLoader(
         dataset,
         batch_size=args.batch_size_per_gpu,

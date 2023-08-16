@@ -2,10 +2,12 @@
 import argparse
 import numpy as np
 import torch
-from nifti_datahandling import NumpyDatasetEval
+from matplotlib import pyplot as plt
+
+from nifti_datahandling import NumpyDatasetEval, NumpyDatasetEvalAllModalities
 from sklearn.model_selection import KFold
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.metrics import precision_score, recall_score
+from sklearn.metrics import precision_score, recall_score, classification_report, confusion_matrix
 from torch import nn
 import sys
 from torch.utils.tensorboard import SummaryWriter
@@ -13,6 +15,7 @@ import vision_transformer as vits
 import utils
 from torchvision import models as torchvision_models
 from sklearn.preprocessing import LabelEncoder
+import seaborn as sns
 
 
 
@@ -34,7 +37,7 @@ class DinoKNN:
         self.k = k
         self.kfold = kfold
 
-    def predict_knn(self, args) -> list:
+    def predict_knn(self, args, visualize_confusion_matrix=False) -> list:
         """
         This method is given either a list of strings that are all numpy arrays representing images
         or a path to a text file containing paths to the test samples
@@ -44,7 +47,7 @@ class DinoKNN:
 
         device = next(self.model.parameters()).device
         # For each data point, preprocess and get an embedding
-        dataset = NumpyDatasetEval(self.data, paths_text=args.eval_file)
+        dataset = NumpyDatasetEvalAllModalities(self.data, paths_text=args.eval_file)
         print(f'testing {args.eval_file}')
         data_loader = torch.utils.data.DataLoader(
             dataset,
@@ -63,20 +66,51 @@ class DinoKNN:
             labels.extend(y)
         embeddings = np.concatenate(embeddings, axis=0)
         # labels are strings, this transforms the labels into unique digits so we can work with sklearn
-        labels = LabelEncoder().fit_transform(labels)
+        le = LabelEncoder()
+        labels = le.fit_transform(labels)
+        # np.unique is sorted so this is fine
+        label_map = le.inverse_transform(np.unique(labels))
+        print(f"labels in order are {label_map}")
 
         # split data into kfold folds.
         # For each fold evaluate precision and recall
         scores = []
+        confusion_matrices = []
         kf = KFold(n_splits=self.kfold, shuffle=True, random_state=8)
         for i, (train_indices, val_indices) in enumerate(kf.split(embeddings)):
             neighbors = KNeighborsClassifier(n_neighbors=self.k).fit(embeddings[train_indices], labels[train_indices])
             predictions = neighbors.predict(embeddings[val_indices])
             precision = precision_score(labels[val_indices], predictions, average="macro")
             recall = recall_score(labels[val_indices], predictions, average="macro")
+            report_dict = classification_report(labels[val_indices], predictions, output_dict=True)
+            confusion_matrices.append(confusion_matrix(labels[val_indices], predictions))
+            print(report_dict)
             scores.append((recall, precision))
 
-        # Return a log of the results as a dictionary
+        if visualize_confusion_matrix:
+            # Return a log of the results as a dictionary
+            average_confusion_matrix = np.sum(confusion_matrices, axis=0) / self.kfold
+
+            # Calculate the percentage for each row
+            row_sums = average_confusion_matrix.sum(axis=1, keepdims=True)
+            percentage_matrix = average_confusion_matrix / row_sums * 100
+
+            # Create a new matrix with both counts and percentages
+            labels_with_percentages = np.empty_like(average_confusion_matrix, dtype=object)
+            for i in range(average_confusion_matrix.shape[0]):
+                for j in range(average_confusion_matrix.shape[1]):
+                    labels_with_percentages[i, j] = f"{average_confusion_matrix[i, j]:.0f}\n({percentage_matrix[i, j]:.2f}%)"
+
+            plt.figure(figsize=(10, 7))
+            sns.set(font_scale=1.2)
+            sns.heatmap(average_confusion_matrix, annot=labels_with_percentages, fmt='', cmap='Blues', xticklabels=label_map,
+                        yticklabels=label_map)
+
+            plt.title('Average Confusion Matrix')
+            plt.xlabel('Predicted')
+            plt.ylabel('Actual')
+            plt.show()
+
         return scores
 
 
@@ -95,7 +129,7 @@ def run_knn(args):
     model.cuda()
     utils.load_pretrained_weights(model, args.pretrained_weights, args.checkpoint_key, args.arch, args.patch_size)
     dinoKNN = DinoKNN(model=model, data=args.data_path, k=5, kfold=5)
-    logs = dinoKNN.predict_knn(args)
+    logs = dinoKNN.predict_knn(args, visualize_confusion_matrix=True)
     print(logs)
 
     total_recall = np.average([tup[0] for tup in logs])
