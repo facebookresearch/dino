@@ -48,7 +48,7 @@ class DinoKNN:
         device = next(self.model.parameters()).device
         # For each data point, preprocess and get an embedding
         dataset = NumpyDatasetEvalAllModalities(self.data, paths_text=args.eval_file)
-        print(f'testing {args.eval_file}')
+        print(f'testing {args.eval_file}, total of {len(dataset)} data')
         data_loader = torch.utils.data.DataLoader(
             dataset,
             batch_size=args.batch_size_per_gpu,

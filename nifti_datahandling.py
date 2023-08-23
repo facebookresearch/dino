@@ -274,10 +274,54 @@ class NumpyDatasetEvalAllModalities(Dataset):
         elif label == "Lungs" or label == "Liver":
             transform = self.ct_transform
         else:
-            raise ValueError("unclear label being used")
+            # Make sure this is fine if you reach this point!
+            transform = self.ct_transform
         transformed_arr = transform(data_array)
         sample = (transformed_arr, label, display_arr)
         return sample
+
+
+class NumpyDatasetMRIEmbeddings(Dataset):
+    """
+    Dataset that uses numpy arrays of shape x,y,3 that have been sampled from DICOM files.
+    The dataset can either contain images from MRI or CT scans which need to be transformed slightly
+    differently.
+
+    Currently, the way to know which modality is used is according to the dataset path itself,
+    this may change in the future.
+    """
+    def __init__(self, root_dir, transform=None, paths_text: str = "phase_no_none_test.txt"):
+        self.root_dir = root_dir
+        with open(os.path.join(self.root_dir, paths_text), 'r') as f:
+            self.file_list = f.readlines()
+            self.file_list = [os.path.join(self.root_dir, file.strip()) for file in self.file_list]
+            self.mri_transform = transforms.Compose([
+                ResizeToX(512),
+                ZScoreNormalization(),
+                ToPILImage(),
+                transforms.ToTensor()
+            ])
+
+            if transform:
+                self.mri_transform = transforms.Compose([
+                    self.mri_transform,
+                    transform
+                    ])
+    def __len__(self):
+        return len(self.file_list)
+
+    def __getitem__(self, idx):
+        file_name = os.path.join(self.root_dir, self.file_list[idx])
+        if file_name.endswith('npz'):
+            data_array = np.load(file_name)['arr_0.npy']
+        else:
+            data_array = np.load(file_name)
+
+        transform = self.mri_transform
+        transformed_arr = transform(data_array)
+        sample = (transformed_arr, self.file_list[idx])
+        return sample
+
 
 
 
