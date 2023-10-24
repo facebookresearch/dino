@@ -283,12 +283,7 @@ class NumpyDatasetEvalAllModalities(Dataset):
 
 class NumpyDatasetMRIEmbeddings(Dataset):
     """
-    Dataset that uses numpy arrays of shape x,y,3 that have been sampled from DICOM files.
-    The dataset can either contain images from MRI or CT scans which need to be transformed slightly
-    differently.
-
-    Currently, the way to know which modality is used is according to the dataset path itself,
-    this may change in the future.
+    Used to create embeddings only for MRI dataset in conjunction with save_embeddings_to_csv.py
     """
     def __init__(self, root_dir, transform=None, paths_text: str = "phase_no_none_test.txt"):
         self.root_dir = root_dir
@@ -322,7 +317,76 @@ class NumpyDatasetMRIEmbeddings(Dataset):
         sample = (transformed_arr, self.file_list[idx])
         return sample
 
+class NumpyDatasetAllModalityEmbeddings(Dataset):
+    """
+    Used to create embeddings only for all modalities dataset in conjunction with save_embeddings_to_csv.py
+    uses the path of the file to get the label which is probably the wrong way to do this but it should do for now.
+    """
+    def __init__(self, root_dir, transform=None, paths_text: str = "phase_no_none_test.txt"):
+        self.root_dir = root_dir
+        with open(os.path.join(self.root_dir, paths_text), 'r') as f:
+            self.file_list = f.readlines()
+            self.file_list = [os.path.join(self.root_dir, file.strip()) for file in self.file_list]
+            self.ct_transform = transforms.Compose([
+                ResizeToX(512),
+                CTWindowing(),
+                ZScoreNormalization(),
+                ToPILImage(),
+                transforms.ToTensor()
 
+            ])
+            self.mri_transform = transforms.Compose([
+                ResizeToX(512),
+                ZScoreNormalization(),
+                ToPILImage(),
+                transforms.ToTensor()
+            ])
+
+
+            if transform:
+                self.ct_transform = transforms.Compose([
+                    self.ct_transform,
+                    transform
+                ])
+                self.mri_transform = transforms.Compose([
+                    self.mri_transform,
+                    transform
+                ])
+
+            self.resize_and_tensor_transform = transforms.Compose([
+                ResizeToX(64),
+                transforms.ToTensor(),
+                ])
+
+    def __len__(self):
+        return len(self.file_list)
+
+    def __getitem__(self, idx):
+        file_name = os.path.join(self.root_dir, self.file_list[idx])
+        if file_name.endswith('npz'):
+            data_array = np.load(file_name)['arr_0.npy']
+        else:
+            data_array = np.load(file_name)
+        try:
+            display_arr = self.resize_and_tensor_transform(data_array)
+        except Exception as e:
+            print(e)
+            print(f"problem file is {file_name}")
+            raise e
+        # Apply the default transform to the sampled slice
+        label = file_name.split('/')[-3]
+
+        #TODO this is obviously a bad solution because these labels tend to change. find a better solution?
+        if label == "Brain":
+            transform = self.mri_transform
+        elif label == "Lungs" or label == "Liver":
+            transform = self.ct_transform
+        else:
+            # Make sure this is fine if you reach this point!
+            transform = self.ct_transform
+        transformed_arr = transform(data_array)
+        sample = (transformed_arr, self.file_list[idx])
+        return sample
 
 
 class ResampleNoneSampler(Sampler):
@@ -426,3 +490,18 @@ class MRINormalization:
         x = (x - x.min()) / (x.max() - x.min() + 0.0001)
         array = x
         return array
+
+class CTTransform:
+
+    def __init__(self):
+        self.ct_transform = transforms.Compose([
+            ResizeToX(512),
+            CTWindowing(),
+            ZScoreNormalization(),
+            ToPILImage(),
+            transforms.ToTensor()
+
+        ])
+
+    def __call__(self, arr):
+        return self.ct_transform(arr)

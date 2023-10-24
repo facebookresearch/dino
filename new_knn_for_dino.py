@@ -114,7 +114,10 @@ class DinoKNN:
         return scores
 
 
-def run_knn(args):
+def init_dino_model(args):
+    """
+    initialize dino model and return it
+    """
     if "vit" in args.arch:
         model = vits.__dict__[args.arch](patch_size=args.patch_size, num_classes=0)
         print(f"Model {args.arch} {args.patch_size}x{args.patch_size} built.")
@@ -128,6 +131,11 @@ def run_knn(args):
         sys.exit(1)
     model.cuda()
     utils.load_pretrained_weights(model, args.pretrained_weights, args.checkpoint_key, args.arch, args.patch_size)
+
+    return model
+
+def run_knn(args):
+    model = init_dino_model(args)
     dinoKNN = DinoKNN(model=model, data=args.data_path, k=5, kfold=5)
     logs = dinoKNN.predict_knn(args, visualize_confusion_matrix=True)
     print(logs)
