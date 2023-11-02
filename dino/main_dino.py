@@ -30,9 +30,9 @@ import torch.nn.functional as F
 from torchvision import datasets, transforms
 from torchvision import models as torchvision_models
 
-import utils
-import vision_transformer as vits
-from vision_transformer import DINOHead
+import dino.utils
+import dino.vision_transformer as vits
+from dino.vision_transformer import DINOHead
 
 torchvision_archs = sorted(name for name in torchvision_models.__dict__
     if name.islower() and not name.startswith("__")
@@ -54,14 +54,14 @@ def get_args_parser():
         mixed precision training (--use_fp16 false) to avoid unstabilities.""")
     parser.add_argument('--out_dim', default=65536, type=int, help="""Dimensionality of
         the DINO head output. For complex and large datasets large values (like 65k) work well.""")
-    parser.add_argument('--norm_last_layer', default=True, type=utils.bool_flag,
+    parser.add_argument('--norm_last_layer', default=True, type=dino.utils.bool_flag,
         help="""Whether or not to weight normalize the last layer of the DINO head.
         Not normalizing leads to better performance but can make the training unstable.
         In our experiments, we typically set this paramater to False with vit_small and True with vit_base.""")
     parser.add_argument('--momentum_teacher', default=0.996, type=float, help="""Base EMA
         parameter for teacher update. The value is increased to 1 during training with cosine schedule.
         We recommend setting a higher value with small batches: for example use 0.9995 with batch size of 256.""")
-    parser.add_argument('--use_bn_in_head', default=False, type=utils.bool_flag,
+    parser.add_argument('--use_bn_in_head', default=False, type=dino.utils.bool_flag,
         help="Whether to use batch normalizations in projection head (Default: False)")
 
     # Temperature teacher parameters
@@ -75,7 +75,7 @@ def get_args_parser():
         help='Number of warmup epochs for the teacher temperature (Default: 30).')
 
     # Training/Optimization parameters
-    parser.add_argument('--use_fp16', type=utils.bool_flag, default=True, help="""Whether or not
+    parser.add_argument('--use_fp16', type=dino.utils.bool_flag, default=True, help="""Whether or not
         to use half precision for training. Improves training time and memory requirements,
         but can provoke instability and slight decay of performance. We recommend disabling
         mixed precision if the loss is unstable, if reducing the patch size or if training with bigger ViTs.""")
@@ -130,9 +130,9 @@ def get_args_parser():
 
 
 def train_dino(args):
-    utils.init_distributed_mode(args)
-    utils.fix_random_seeds(args.seed)
-    print("git:\n  {}\n".format(utils.get_sha()))
+    dino.utils.init_distributed_mode(args)
+    dino.utils.fix_random_seeds(args.seed)
+    print("git:\n  {}\n".format(dino.utils.get_sha()))
     print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
     cudnn.benchmark = True
 
@@ -180,20 +180,20 @@ def train_dino(args):
         print(f"Unknow architecture: {args.arch}")
 
     # multi-crop wrapper handles forward with inputs of different resolutions
-    student = utils.MultiCropWrapper(student, DINOHead(
+    student = dino.utils.MultiCropWrapper(student, DINOHead(
         embed_dim,
         args.out_dim,
         use_bn=args.use_bn_in_head,
         norm_last_layer=args.norm_last_layer,
     ))
-    teacher = utils.MultiCropWrapper(
+    teacher = dino.utils.MultiCropWrapper(
         teacher,
         DINOHead(embed_dim, args.out_dim, args.use_bn_in_head),
     )
     # move networks to gpu
     student, teacher = student.cuda(), teacher.cuda()
     # synchronize batch norms (if any)
-    if utils.has_batchnorms(student):
+    if dino.utils.has_batchnorms(student):
         student = nn.SyncBatchNorm.convert_sync_batchnorm(student)
         teacher = nn.SyncBatchNorm.convert_sync_batchnorm(teacher)
 
@@ -222,38 +222,38 @@ def train_dino(args):
     ).cuda()
 
     # ============ preparing optimizer ... ============
-    params_groups = utils.get_params_groups(student)
+    params_groups = dino.utils.get_params_groups(student)
     if args.optimizer == "adamw":
         optimizer = torch.optim.AdamW(params_groups)  # to use with ViTs
     elif args.optimizer == "sgd":
         optimizer = torch.optim.SGD(params_groups, lr=0, momentum=0.9)  # lr is set by scheduler
     elif args.optimizer == "lars":
-        optimizer = utils.LARS(params_groups)  # to use with convnet and large batches
+        optimizer = dino.utils.LARS(params_groups)  # to use with convnet and large batches
     # for mixed precision training
     fp16_scaler = None
     if args.use_fp16:
         fp16_scaler = torch.cuda.amp.GradScaler()
 
     # ============ init schedulers ... ============
-    lr_schedule = utils.cosine_scheduler(
-        args.lr * (args.batch_size_per_gpu * utils.get_world_size()) / 256.,  # linear scaling rule
+    lr_schedule = dino.utils.cosine_scheduler(
+        args.lr * (args.batch_size_per_gpu * dino.utils.get_world_size()) / 256.,  # linear scaling rule
         args.min_lr,
         args.epochs, len(data_loader),
         warmup_epochs=args.warmup_epochs,
     )
-    wd_schedule = utils.cosine_scheduler(
+    wd_schedule = dino.utils.cosine_scheduler(
         args.weight_decay,
         args.weight_decay_end,
         args.epochs, len(data_loader),
     )
     # momentum parameter is increased to 1. during training with a cosine schedule
-    momentum_schedule = utils.cosine_scheduler(args.momentum_teacher, 1,
+    momentum_schedule = dino.utils.cosine_scheduler(args.momentum_teacher, 1,
                                                args.epochs, len(data_loader))
     print(f"Loss, optimizer and schedulers ready.")
 
     # ============ optionally resume training ... ============
     to_restore = {"epoch": 0}
-    utils.restart_from_checkpoint(
+    dino.utils.restart_from_checkpoint(
         os.path.join(args.output_dir, "checkpoint.pth"),
         run_variables=to_restore,
         student=student,
@@ -285,12 +285,12 @@ def train_dino(args):
         }
         if fp16_scaler is not None:
             save_dict['fp16_scaler'] = fp16_scaler.state_dict()
-        utils.save_on_master(save_dict, os.path.join(args.output_dir, 'checkpoint.pth'))
+        dino.utils.save_on_master(save_dict, os.path.join(args.output_dir, 'checkpoint.pth'))
         if args.saveckp_freq and epoch % args.saveckp_freq == 0:
-            utils.save_on_master(save_dict, os.path.join(args.output_dir, f'checkpoint{epoch:04}.pth'))
+            dino.utils.save_on_master(save_dict, os.path.join(args.output_dir, f'checkpoint{epoch:04}.pth'))
         log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                      'epoch': epoch}
-        if utils.is_main_process():
+        if dino.utils.is_main_process():
             with (Path(args.output_dir) / "log.txt").open("a") as f:
                 f.write(json.dumps(log_stats) + "\n")
     total_time = time.time() - start_time
@@ -301,7 +301,7 @@ def train_dino(args):
 def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loader,
                     optimizer, lr_schedule, wd_schedule, momentum_schedule,epoch,
                     fp16_scaler, args):
-    metric_logger = utils.MetricLogger(delimiter="  ")
+    metric_logger = dino.utils.MetricLogger(delimiter="  ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
     for it, (images, _) in enumerate(metric_logger.log_every(data_loader, 10, header)):
         # update weight decay and learning rate according to their schedule
@@ -329,16 +329,16 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
         if fp16_scaler is None:
             loss.backward()
             if args.clip_grad:
-                param_norms = utils.clip_gradients(student, args.clip_grad)
-            utils.cancel_gradients_last_layer(epoch, student,
+                param_norms = dino.utils.clip_gradients(student, args.clip_grad)
+            dino.utils.cancel_gradients_last_layer(epoch, student,
                                               args.freeze_last_layer)
             optimizer.step()
         else:
             fp16_scaler.scale(loss).backward()
             if args.clip_grad:
                 fp16_scaler.unscale_(optimizer)  # unscale the gradients of optimizer's assigned params in-place
-                param_norms = utils.clip_gradients(student, args.clip_grad)
-            utils.cancel_gradients_last_layer(epoch, student,
+                param_norms = dino.utils.clip_gradients(student, args.clip_grad)
+            dino.utils.cancel_gradients_last_layer(epoch, student,
                                               args.freeze_last_layer)
             fp16_scaler.step(optimizer)
             fp16_scaler.update()
@@ -435,15 +435,15 @@ class DataAugmentationDINO(object):
         self.global_transfo1 = transforms.Compose([
             transforms.RandomResizedCrop(224, scale=global_crops_scale, interpolation=Image.BICUBIC),
             flip_and_color_jitter,
-            utils.GaussianBlur(1.0),
+            dino.utils.GaussianBlur(1.0),
             normalize,
         ])
         # second global crop
         self.global_transfo2 = transforms.Compose([
             transforms.RandomResizedCrop(224, scale=global_crops_scale, interpolation=Image.BICUBIC),
             flip_and_color_jitter,
-            utils.GaussianBlur(0.1),
-            utils.Solarization(0.2),
+            dino.utils.GaussianBlur(0.1),
+            dino.utils.Solarization(0.2),
             normalize,
         ])
         # transformation for the local small crops
@@ -451,7 +451,7 @@ class DataAugmentationDINO(object):
         self.local_transfo = transforms.Compose([
             transforms.RandomResizedCrop(96, scale=local_crops_scale, interpolation=Image.BICUBIC),
             flip_and_color_jitter,
-            utils.GaussianBlur(p=0.5),
+            dino.utils.GaussianBlur(p=0.5),
             normalize,
         ])
 

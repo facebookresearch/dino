@@ -26,8 +26,8 @@ from torchvision import transforms as pth_transforms
 import numpy as np
 from PIL import Image
 
-import utils
-import vision_transformer as vits
+import dino.utils
+import dino.vision_transformer as vits
 
 
 FOURCC = {

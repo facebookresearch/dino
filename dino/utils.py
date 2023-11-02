@@ -103,6 +103,7 @@ def load_pretrained_weights(model, pretrained_weights, checkpoint_key, model_nam
             url = "dino_resnet50_pretrain/dino_resnet50_pretrain.pth"
         if url is not None:
             print("Since no pretrained weights have been provided, we load the reference pretrained DINO weights.")
+            print(f"Going to download {url=} via torch.hub")
             state_dict = torch.hub.load_state_dict_from_url(url="https://dl.fbaipublicfiles.com/dino/" + url)
             model.load_state_dict(state_dict, strict=True)
         else:
@@ -123,6 +124,7 @@ def load_pretrained_linear_weights(linear_classifier, model_name, patch_size):
         url = "dino_resnet50_pretrain/dino_resnet50_linearweights.pth"
     if url is not None:
         print("We load the reference pretrained linear weights.")
+        print(f"Going to download {url=} via torch.hub")
         state_dict = torch.hub.load_state_dict_from_url(url="https://dl.fbaipublicfiles.com/dino/" + url)["state_dict"]
         linear_classifier.load_state_dict(state_dict, strict=True)
     else:
