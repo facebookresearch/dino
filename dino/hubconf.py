@@ -14,7 +14,7 @@
 import torch
 from torchvision.models.resnet import resnet50
 
-import vision_transformer as vits
+import dino.vision_transformer as vits
 
 dependencies = ["torch", "torchvision"]
 

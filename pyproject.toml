@@ -1,0 +1,7 @@
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = [ "setuptools" ]
+
+[project]
+name = "dino"
+version = "2023.04.27"

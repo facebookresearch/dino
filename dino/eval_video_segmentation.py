@@ -30,8 +30,8 @@ from torch.nn import functional as F
 from PIL import Image
 from torchvision import transforms
 
-import utils
-import vision_transformer as vits
+import dino.utils
+import dino.vision_transformer as vits
 
 
 @torch.no_grad()
@@ -264,14 +264,14 @@ if __name__ == '__main__':
     parser.add_argument("--bs", type=int, default=6, help="Batch size, try to reduce if OOM")
     args = parser.parse_args()
 
-    print("git:\n  {}\n".format(utils.get_sha()))
+    print("git:\n  {}\n".format(dino.utils.get_sha()))
     print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
 
     # building network
     model = vits.__dict__[args.arch](patch_size=args.patch_size, num_classes=0)
     print(f"Model {args.arch} {args.patch_size}x{args.patch_size} built.")
     model.cuda()
-    utils.load_pretrained_weights(model, args.pretrained_weights, args.checkpoint_key, args.arch, args.patch_size)
+    dino.utils.load_pretrained_weights(model, args.pretrained_weights, args.checkpoint_key, args.arch, args.patch_size)
     for param in model.parameters():
         param.requires_grad = False
     model.eval()
