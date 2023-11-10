@@ -227,6 +227,7 @@ def train_dino(args):
 
     # torch.compile() is a new feature in PyTorch 2.0 that can improve the performance of PyTorch code.
     if torch.__version__ >= "2.0.0":
+        print("In Compile")
         dino_loss = torch.compile(dino_loss)
 
     # ============ preparing optimizer ... ============
