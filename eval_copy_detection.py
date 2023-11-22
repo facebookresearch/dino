@@ -223,7 +223,12 @@ if __name__ == '__main__':
     parser.add_argument('--num_workers', default=10, type=int, help='Number of data loading workers per GPU.')
     parser.add_argument("--dist_url", default="env://", type=str, help="""url used to set up
         distributed training; see https://pytorch.org/docs/stable/distributed.html""")
-    parser.add_argument("--local_rank", default=0, type=int, help="Please ignore and do not set this argument.")
+    # In pytorch 2.0 argument name changes to --local-rank
+    if torch.__version__ >= "2.0.0":
+        parser.add_argument("--local-rank", default=0, type=int, help="Please ignore and do not set this argument.")
+    else :
+        parser.add_argument("--local_rank", default=0, type=int, help="Please ignore and do not set this argument.")
+
     args = parser.parse_args()
 
     utils.init_distributed_mode(args)
