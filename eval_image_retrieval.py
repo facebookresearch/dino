@@ -40,8 +40,7 @@ class OxfordParisDataset(torch.utils.data.Dataset):
         with open(gnd_fname, 'rb') as f:
             cfg = pickle.load(f)
         cfg['gnd_fname'] = gnd_fname
-        cfg['ext'] = '.jpg'
-        cfg['qext'] = '.jpg'
+        cfg['qext'] = cfg['ext'] = '.jpg'
         cfg['dir_data'] = os.path.join(dir_main, dataset)
         cfg['dir_images'] = os.path.join(cfg['dir_data'], 'jpg')
         cfg['n'] = len(cfg['imlist'])
