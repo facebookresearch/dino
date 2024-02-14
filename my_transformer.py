@@ -767,7 +767,7 @@ class IBVSTransformerTraining():
             for of in self.output_features:
                 param_str += str(of)
         param_str += self.token_str
-        param_str += str(args.batch_size)
+        param_str += '_bs_' + str(args.batch_size)
         if self.use_depth:
             param_str += '_d'
         if args.blurred:
