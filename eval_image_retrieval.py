@@ -25,7 +25,7 @@ from torchvision import transforms as pth_transforms
 from PIL import Image, ImageFile
 import numpy as np
 
-import utils
+import vit_utils
 import vision_transformer as vits
 from eval_knn import extract_features
 
@@ -83,7 +83,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('Image Retrieval on revisited Paris and Oxford')
     parser.add_argument('--data_path', default='/path/to/revisited_paris_oxford/', type=str)
     parser.add_argument('--dataset', default='roxford5k', type=str, choices=['roxford5k', 'rparis6k'])
-    parser.add_argument('--multiscale', default=False, type=utils.bool_flag)
+    parser.add_argument('--multiscale', default=False, type=vit_utils.bool_flag)
     parser.add_argument('--imsize', default=224, type=int, help='Image size')
     parser.add_argument('--pretrained_weights', default='', type=str, help="Path to pretrained weights to evaluate.")
     parser.add_argument('--use_cuda', default=True, type=utils.bool_flag)
@@ -97,8 +97,8 @@ if __name__ == '__main__':
     parser.add_argument("--local_rank", default=0, type=int, help="Please ignore and do not set this argument.")
     args = parser.parse_args()
 
-    utils.init_distributed_mode(args)
-    print("git:\n  {}\n".format(utils.get_sha()))
+    vit_utils.init_distributed_mode(args)
+    print("git:\n  {}\n".format(vit_utils.get_sha()))
     print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
     cudnn.benchmark = True
 
@@ -165,7 +165,7 @@ if __name__ == '__main__':
     train_features = extract_features(model, data_loader_train, args.use_cuda, multiscale=args.multiscale)
     query_features = extract_features(model, data_loader_query, args.use_cuda, multiscale=args.multiscale)
 
-    if utils.get_rank() == 0:  # only rank 0 will work from now on
+    if vit_utils.get_rank() == 0:  # only rank 0 will work from now on
         # normalize features
         train_features = nn.functional.normalize(train_features, dim=1, p=2)
         query_features = nn.functional.normalize(query_features, dim=1, p=2)
@@ -187,7 +187,7 @@ if __name__ == '__main__':
             g['ok'] = np.concatenate([gnd[i]['easy'], gnd[i]['hard']])
             g['junk'] = np.concatenate([gnd[i]['junk']])
             gnd_t.append(g)
-        mapM, apsM, mprM, prsM = utils.compute_map(ranks, gnd_t, ks)
+        mapM, apsM, mprM, prsM = vit_utils.compute_map(ranks, gnd_t, ks)
         # search for hard
         gnd_t = []
         for i in range(len(gnd)):
@@ -195,7 +195,7 @@ if __name__ == '__main__':
             g['ok'] = np.concatenate([gnd[i]['hard']])
             g['junk'] = np.concatenate([gnd[i]['junk'], gnd[i]['easy']])
             gnd_t.append(g)
-        mapH, apsH, mprH, prsH = utils.compute_map(ranks, gnd_t, ks)
+        mapH, apsH, mprH, prsH = vit_utils.compute_map(ranks, gnd_t, ks)
         print('>> {}: mAP M: {}, H: {}'.format(args.dataset, np.around(mapM*100, decimals=2), np.around(mapH*100, decimals=2)))
         print('>> {}: mP@k{} M: {}, H: {}'.format(args.dataset, np.array(ks), np.around(mprM*100, decimals=2), np.around(mprH*100, decimals=2)))
     dist.barrier()

@@ -24,13 +24,13 @@ from torchvision import datasets
 from torchvision import transforms as pth_transforms
 from torchvision import models as torchvision_models
 
-import utils
+import vit_utils
 import vision_transformer as vits
 
 
 def eval_linear(args):
-    utils.init_distributed_mode(args)
-    print("git:\n  {}\n".format(utils.get_sha()))
+    vit_utils.init_distributed_mode(args)
+    print("git:\n  {}\n".format(vit_utils.get_sha()))
     print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
     cudnn.benchmark = True
 
@@ -54,7 +54,7 @@ def eval_linear(args):
     model.cuda()
     model.eval()
     # load weights to evaluate
-    utils.load_pretrained_weights(model, args.pretrained_weights, args.checkpoint_key, args.arch, args.patch_size)
+    vit_utils.load_pretrained_weights(model, args.pretrained_weights, args.checkpoint_key, args.arch, args.patch_size)
     print(f"Model {args.arch} built.")
 
     linear_classifier = LinearClassifier(embed_dim, num_labels=args.num_labels)
@@ -77,7 +77,7 @@ def eval_linear(args):
     )
 
     if args.evaluate:
-        utils.load_pretrained_linear_weights(linear_classifier, args.arch, args.patch_size)
+        vit_utils.load_pretrained_linear_weights(linear_classifier, args.arch, args.patch_size)
         test_stats = validate_network(val_loader, model, linear_classifier, args.n_last_blocks, args.avgpool_patchtokens)
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
         return
@@ -102,7 +102,7 @@ def eval_linear(args):
     # set optimizer
     optimizer = torch.optim.SGD(
         linear_classifier.parameters(),
-        args.lr * (args.batch_size_per_gpu * utils.get_world_size()) / 256., # linear scaling rule
+        args.lr * (args.batch_size_per_gpu * vit_utils.get_world_size()) / 256., # linear scaling rule
         momentum=0.9,
         weight_decay=0, # we do not apply weight decay
     )
@@ -110,7 +110,7 @@ def eval_linear(args):
 
     # Optionally resume from a checkpoint
     to_restore = {"epoch": 0, "best_acc": 0.}
-    utils.restart_from_checkpoint(
+    vit_utils.restart_from_checkpoint(
         os.path.join(args.output_dir, "checkpoint.pth.tar"),
         run_variables=to_restore,
         state_dict=linear_classifier,
@@ -135,7 +135,7 @@ def eval_linear(args):
             print(f'Max accuracy so far: {best_acc:.2f}%')
             log_stats = {**{k: v for k, v in log_stats.items()},
                          **{f'test_{k}': v for k, v in test_stats.items()}}
-        if utils.is_main_process():
+        if vit_utils.is_main_process():
             with (Path(args.output_dir) / "log.txt").open("a") as f:
                 f.write(json.dumps(log_stats) + "\n")
             save_dict = {
@@ -152,8 +152,8 @@ def eval_linear(args):
 
 def train(model, linear_classifier, optimizer, loader, epoch, n, avgpool):
     linear_classifier.train()
-    metric_logger = utils.MetricLogger(delimiter="  ")
-    metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
+    metric_logger = vit_utils.MetricLogger(delimiter="  ")
+    metric_logger.add_meter('lr', vit_utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
     header = 'Epoch: [{}]'.format(epoch)
     for (inp, target) in metric_logger.log_every(loader, 20, header):
         # move to gpu
@@ -195,7 +195,7 @@ def train(model, linear_classifier, optimizer, loader, epoch, n, avgpool):
 @torch.no_grad()
 def validate_network(val_loader, model, linear_classifier, n, avgpool):
     linear_classifier.eval()
-    metric_logger = utils.MetricLogger(delimiter="  ")
+    metric_logger = vit_utils.MetricLogger(delimiter="  ")
     header = 'Test:'
     for inp, target in metric_logger.log_every(val_loader, 20, header):
         # move to gpu
@@ -216,9 +216,9 @@ def validate_network(val_loader, model, linear_classifier, n, avgpool):
         loss = nn.CrossEntropyLoss()(output, target)
 
         if linear_classifier.module.num_labels >= 5:
-            acc1, acc5 = utils.accuracy(output, target, topk=(1, 5))
+            acc1, acc5 = vit_utils.accuracy(output, target, topk=(1, 5))
         else:
-            acc1, = utils.accuracy(output, target, topk=(1,))
+            acc1, = vit_utils.accuracy(output, target, topk=(1,))
 
         batch_size = inp.shape[0]
         metric_logger.update(loss=loss.item())
@@ -255,7 +255,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('Evaluation with linear classification on ImageNet')
     parser.add_argument('--n_last_blocks', default=4, type=int, help="""Concatenate [CLS] tokens
         for the `n` last blocks. We use `n=4` when evaluating ViT-Small and `n=1` with ViT-Base.""")
-    parser.add_argument('--avgpool_patchtokens', default=False, type=utils.bool_flag,
+    parser.add_argument('--avgpool_patchtokens', default=False, type=vit_utils.bool_flag,
         help="""Whether ot not to concatenate the global average pooled features to the [CLS] token.
         We typically set this to False for ViT-Small and to True with ViT-Base.""")
     parser.add_argument('--arch', default='vit_small', type=str, help='Architecture')

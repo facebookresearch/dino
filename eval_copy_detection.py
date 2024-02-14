@@ -25,7 +25,7 @@ from torchvision import transforms as pth_transforms
 from PIL import Image, ImageFile
 import numpy as np
 
-import utils
+import vit_utils
 import vision_transformer as vits
 from eval_knn import extract_features
 
@@ -161,7 +161,7 @@ def extract_features(image_list, model, args):
         num_workers=args.num_workers, drop_last=False,
         sampler=torch.utils.data.DistributedSampler(tempdataset, shuffle=False))
     features = None
-    for samples, index in utils.MetricLogger(delimiter="  ").log_every(data_loader, 10):
+    for samples, index in vit_utils.MetricLogger(delimiter="  ").log_every(data_loader, 10):
         samples, index = samples.cuda(non_blocking=True), index.cuda(non_blocking=True)
         feats = model.get_intermediate_layers(samples, n=1)[0].clone()
 
@@ -215,7 +215,7 @@ if __name__ == '__main__':
     parser.add_argument('--imsize', default=320, type=int, help='Image size (square image)')
     parser.add_argument('--batch_size_per_gpu', default=16, type=int, help='Per-GPU batch-size')
     parser.add_argument('--pretrained_weights', default='', type=str, help="Path to pretrained weights to evaluate.")
-    parser.add_argument('--use_cuda', default=True, type=utils.bool_flag)
+    parser.add_argument('--use_cuda', default=True, type=vit_utils.bool_flag)
     parser.add_argument('--arch', default='vit_base', type=str, help='Architecture')
     parser.add_argument('--patch_size', default=8, type=int, help='Patch resolution of the model.')
     parser.add_argument("--checkpoint_key", default="teacher", type=str,
@@ -226,8 +226,8 @@ if __name__ == '__main__':
     parser.add_argument("--local_rank", default=0, type=int, help="Please ignore and do not set this argument.")
     args = parser.parse_args()
 
-    utils.init_distributed_mode(args)
-    print("git:\n  {}\n".format(utils.get_sha()))
+    vit_utils.init_distributed_mode(args)
+    print("git:\n  {}\n".format(vit_utils.get_sha()))
     print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
     cudnn.benchmark = True
 
@@ -241,7 +241,7 @@ if __name__ == '__main__':
     if args.use_cuda:
         model.cuda()
     model.eval()
-    utils.load_pretrained_weights(model, args.pretrained_weights, args.checkpoint_key, args.arch, args.patch_size)
+    vit_utils.load_pretrained_weights(model, args.pretrained_weights, args.checkpoint_key, args.arch, args.patch_size)
 
     dataset = CopydaysDataset(args.data_path)
 
@@ -250,7 +250,7 @@ if __name__ == '__main__':
     queries = []
     for q in dataset.query_blocks:
         queries.append(extract_features(dataset.get_block(q), model, args))
-    if utils.get_rank() == 0:
+    if vit_utils.get_rank() == 0:
         queries = torch.cat(queries)
         print(f"Extraction of queries features done. Shape: {queries.shape}")
 
@@ -264,7 +264,7 @@ if __name__ == '__main__':
         print("Using distractors...")
         list_distractors = [os.path.join(args.distractors_path, s) for s in os.listdir(args.distractors_path) if is_image_file(s)]
         database.append(extract_features(list_distractors, model, args))
-    if utils.get_rank() == 0:
+    if vit_utils.get_rank() == 0:
         database = torch.cat(database)
         print(f"Extraction of database and distractors features done. Shape: {database.shape}")
 
@@ -273,12 +273,12 @@ if __name__ == '__main__':
         print(f"Extracting features on images from {args.whitening_path} for learning the whitening operator.")
         list_whit = [os.path.join(args.whitening_path, s) for s in os.listdir(args.whitening_path) if is_image_file(s)]
         features_for_whitening = extract_features(list_whit, model, args)
-        if utils.get_rank() == 0:
+        if vit_utils.get_rank() == 0:
             # center
             mean_feature = torch.mean(features_for_whitening, dim=0)
             database -= mean_feature
             queries -= mean_feature
-            pca = utils.PCA(dim=database.shape[-1], whit=0.5)
+            pca = vit_utils.PCA(dim=database.shape[-1], whit=0.5)
             # compute covariance
             cov = torch.mm(features_for_whitening.T, features_for_whitening) / features_for_whitening.shape[0]
             pca.train_pca(cov.cpu().numpy())
@@ -286,7 +286,7 @@ if __name__ == '__main__':
             queries = pca.apply(queries)
 
     # ============ Copy detection ... ============
-    if utils.get_rank() == 0:
+    if vit_utils.get_rank() == 0:
         # l2 normalize the features
         database = nn.functional.normalize(database, dim=1, p=2)
         queries = nn.functional.normalize(queries, dim=1, p=2)

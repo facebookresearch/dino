@@ -1,0 +1,4 @@
+*.pth
+testloss_*
+trainloss_*
+*.png

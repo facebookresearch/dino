@@ -23,7 +23,7 @@ from torchvision import datasets
 from torchvision import transforms as pth_transforms
 from torchvision import models as torchvision_models
 
-import utils
+import vit_utils
 import vision_transformer as vits
 
 
@@ -68,7 +68,7 @@ def extract_feature_pipeline(args):
         print(f"Architecture {args.arch} non supported")
         sys.exit(1)
     model.cuda()
-    utils.load_pretrained_weights(model, args.pretrained_weights, args.checkpoint_key, args.arch, args.patch_size)
+    vit_utils.load_pretrained_weights(model, args.pretrained_weights, args.checkpoint_key, args.arch, args.patch_size)
     model.eval()
 
     # ============ extract features ... ============
@@ -77,7 +77,7 @@ def extract_feature_pipeline(args):
     print("Extracting features for val set...")
     test_features = extract_features(model, data_loader_val, args.use_cuda)
 
-    if utils.get_rank() == 0:
+    if vit_utils.get_rank() == 0:
         train_features = nn.functional.normalize(train_features, dim=1, p=2)
         test_features = nn.functional.normalize(test_features, dim=1, p=2)
 
@@ -94,13 +94,13 @@ def extract_feature_pipeline(args):
 
 @torch.no_grad()
 def extract_features(model, data_loader, use_cuda=True, multiscale=False):
-    metric_logger = utils.MetricLogger(delimiter="  ")
+    metric_logger = vit_utils.MetricLogger(delimiter="  ")
     features = None
     for samples, index in metric_logger.log_every(data_loader, 10):
         samples = samples.cuda(non_blocking=True)
         index = index.cuda(non_blocking=True)
         if multiscale:
-            feats = utils.multi_scale(samples, model)
+            feats = vit_utils.multi_scale(samples, model)
         else:
             feats = model(samples).clone()
 
@@ -196,7 +196,7 @@ if __name__ == '__main__':
     parser.add_argument('--temperature', default=0.07, type=float,
         help='Temperature used in the voting coefficient')
     parser.add_argument('--pretrained_weights', default='', type=str, help="Path to pretrained weights to evaluate.")
-    parser.add_argument('--use_cuda', default=True, type=utils.bool_flag,
+    parser.add_argument('--use_cuda', default=True, type=vit_utils.bool_flag,
         help="Should we store the features on GPU? We recommend setting this to False if you encounter OOM")
     parser.add_argument('--arch', default='vit_small', type=str, help='Architecture')
     parser.add_argument('--patch_size', default=16, type=int, help='Patch resolution of the model.')
@@ -213,8 +213,8 @@ if __name__ == '__main__':
     parser.add_argument('--data_path', default='/path/to/imagenet/', type=str)
     args = parser.parse_args()
 
-    utils.init_distributed_mode(args)
-    print("git:\n  {}\n".format(utils.get_sha()))
+    vit_utils.init_distributed_mode(args)
+    print("git:\n  {}\n".format(vit_utils.get_sha()))
     print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
     cudnn.benchmark = True
 
@@ -227,7 +227,7 @@ if __name__ == '__main__':
         # need to extract features !
         train_features, test_features, train_labels, test_labels = extract_feature_pipeline(args)
 
-    if utils.get_rank() == 0:
+    if vit_utils.get_rank() == 0:
         if args.use_cuda:
             train_features = train_features.cuda()
             test_features = test_features.cuda()
