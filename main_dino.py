@@ -120,7 +120,7 @@ def get_args_parser():
     parser.add_argument('--data_path', default='/path/to/imagenet/train/', type=str,
         help='Please specify path to the ImageNet training data.')
     parser.add_argument('--output_dir', default=".", type=str, help='Path to save logs and checkpoints.')
-    parser.add_argument('--saveckp_freq', default=20, type=int, help='Save checkpoint every x epochs.')
+    parser.add_argument('--saveckp_freq', default=5, type=int, help='Save checkpoint every x epochs.')
     parser.add_argument('--seed', default=0, type=int, help='Random seed.')
     parser.add_argument('--num_workers', default=10, type=int, help='Number of data loading workers per GPU.')
     parser.add_argument("--dist_url", default="env://", type=str, help="""url used to set up
@@ -433,14 +433,14 @@ class DataAugmentationDINO(object):
 
         # first global crop
         self.global_transfo1 = transforms.Compose([
-            transforms.RandomResizedCrop(224, scale=global_crops_scale, interpolation=Image.BICUBIC),
+            transforms.RandomResizedCrop(112, scale=global_crops_scale, interpolation=Image.BICUBIC),
             flip_and_color_jitter,
             utils.GaussianBlur(1.0),
             normalize,
         ])
         # second global crop
         self.global_transfo2 = transforms.Compose([
-            transforms.RandomResizedCrop(224, scale=global_crops_scale, interpolation=Image.BICUBIC),
+            transforms.RandomResizedCrop(112, scale=global_crops_scale, interpolation=Image.BICUBIC),
             flip_and_color_jitter,
             utils.GaussianBlur(0.1),
             utils.Solarization(0.2),
@@ -449,7 +449,7 @@ class DataAugmentationDINO(object):
         # transformation for the local small crops
         self.local_crops_number = local_crops_number
         self.local_transfo = transforms.Compose([
-            transforms.RandomResizedCrop(96, scale=local_crops_scale, interpolation=Image.BICUBIC),
+            transforms.RandomResizedCrop(48, scale=local_crops_scale, interpolation=Image.BICUBIC),
             flip_and_color_jitter,
             utils.GaussianBlur(p=0.5),
             normalize,
