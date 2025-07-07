@@ -179,7 +179,38 @@ def train_dino(args):
 
     # ---- 数据加载 ----
     dataset = DinoSequenceDataset(args.data_path)
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=0,collate_fn=my_collate_fn)
+
+    # 1) 统计每条样本的 target-D 标签
+    labels = []
+    for i in range(len(dataset)):
+        t = dataset[i]["target_d_tensor"]
+        labels.append(int(t.item()) if t is not None else -1)  # 用 -1 标记无标签
+
+    labels = torch.tensor(labels)
+    valid  = labels >= 0                        # 过滤掉 -1 的样本
+    freq   = torch.bincount(labels[valid], minlength=4).float()
+
+    # 2) 构建权重：权重 ∝ 1 / 频次
+    weights = torch.zeros_like(labels, dtype=torch.float)
+    weights[valid] = 1.0 / freq[labels[valid]]
+
+    # 3) WeightedRandomSampler
+    sampler = torch.utils.data.WeightedRandomSampler(
+        weights      = weights,
+        num_samples  = len(weights),    # 一个 epoch 看一遍原始样本数
+        replacement  = True             # 必须 True 才能按权重放回采样
+    )
+
+    # 4) DataLoader 用 sampler，shuffle 要关掉
+    dataloader = DataLoader(
+        dataset,
+        batch_size   = args.batch_size,
+        sampler      = sampler,
+        shuffle      = False,           # sampler 已经决定顺序
+        num_workers  = 0,
+        collate_fn   = my_collate_fn
+    )
+
 
     # ---- 模型 ----
     student = ASDTransformer(mode="pretrain").to(device)
@@ -247,7 +278,7 @@ def train_dino(args):
                     t_out = teacher(t_a, t_s, t_d, t_a_idx, t_s_idx, t_d_idx, teacher_mask)
                     dinoloss = dino_loss(s_out, t_out, epoch)
                     vicreg_loss = vicreg_loss_fn(s_out, t_out)
-                    loss = dinoloss + vicreg_loss
+                    loss = dinoloss + vicreg_loss*0
                     student_var = s_out.var(dim=1).mean().item()  # [B, D] → scalar
                     teacher_var = t_out.var(dim=1).mean().item()
                     student_variances.append(student_var)
@@ -266,7 +297,8 @@ def train_dino(args):
                 # print("s_out:", s_out.shape, "t_out:", t_out.shape)
                 dinoloss = dino_loss(s_out, t_out, epoch)
                 vicreg_loss = vicreg_loss_fn(s_out, t_out)
-                loss = dinoloss + vicreg_loss
+                print("dinoloss:", dinoloss.item(), "vicreg_loss:", vicreg_loss.item())
+                loss = dinoloss + vicreg_loss*0
                 student_var = s_out.var(dim=1).mean().item()  # [B, D] → scalar
                 teacher_var = t_out.var(dim=1).mean().item()
                 student_variances.append(student_var)
