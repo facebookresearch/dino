@@ -18,6 +18,50 @@ from sequence_transformer import ASDTransformer
 from dino_sequence_dataset import DinoSequenceDataset
 from utils import clip_gradients
 
+
+import torch.nn.functional as F
+from math import log
+
+# ---------- Balanced-Softmax ----------
+class BalancedSoftmaxLoss(nn.Module):
+    def __init__(self, freq, reduction='mean'):
+        super().__init__()
+        self.register_buffer('log_freq', torch.log(freq))
+        self.reduction = reduction
+    def forward(self, logits, target):
+        logits_bs = logits + self.log_freq                    # B
+        return F.cross_entropy(logits_bs, target, reduction=self.reduction)
+
+# ---------- α-Focal ----------
+class FocalLoss(nn.Module):
+    def __init__(self, alpha, gamma=2.0, reduction='mean'):
+        super().__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.reduction = reduction
+    def forward(self, logits, target):
+        ce = F.cross_entropy(logits, target,
+                             weight=self.alpha, reduction='none')
+        pt = torch.exp(-ce)
+        loss = ((1 - pt) ** self.gamma) * ce
+        return loss.mean() if self.reduction == 'mean' else loss.sum()
+
+# ---------- LDAM (含可选 DRW) ----------
+class LDAMLoss(nn.Module):
+    def __init__(self, freq, max_m=0.5):
+        super().__init__()
+        self.margins = max_m / (freq ** 0.25)
+        self.num_classes = len(freq)
+    def forward(self, logits, target, epoch, defer_epoch, cls_weight):
+        margins = self.margins[target].to(logits.device)
+        logits_adj = logits.clone()
+        logits_adj[range(len(target)), target] -= margins     # 类别特定 margin
+        if epoch >= defer_epoch:                              # DRW
+            weight = cls_weight
+        else:
+            weight = None
+        return F.cross_entropy(logits_adj, target, weight=weight)
+
 def my_collate_fn(batch):
     return {
         "s_a": torch.stack([item['student_a_tensor'] for item in batch]),
@@ -38,7 +82,33 @@ def train_finetune(args):
     train_dataset = DinoSequenceDataset(args.train_data_path)
     val_dataset = DinoSequenceDataset(args.val_data_path)
 
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0, collate_fn=my_collate_fn)
+
+    # ★ 在读取 train_dataset 之后、创建 DataLoader 之前插入
+    with torch.no_grad():
+        labels = torch.tensor([train_dataset[i]['target_d_tensor'].item()
+                            for i in range(len(train_dataset))], dtype=torch.long)
+    freq = torch.bincount(labels, minlength=4).float()          # 4 类
+    cls_weight = (1.0 / freq).to(device)                        # A: 反频次权重
+
+    # =========== 采样策略 ===========
+    if args.use_sampler:
+        sample_weight = cls_weight[labels].cpu()                # 每条样本权重
+        sampler = torch.utils.data.WeightedRandomSampler(sample_weight,
+                                                        num_samples=len(sample_weight),
+                                                        replacement=True)
+        shuffle_flag = False
+    else:
+        sampler = None
+        shuffle_flag = True
+
+
+
+    train_loader = DataLoader(train_dataset,
+                            batch_size=args.batch_size,
+                            shuffle=shuffle_flag,
+                            sampler=sampler,
+                            num_workers=0,
+                            collate_fn=my_collate_fn)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0, collate_fn=my_collate_fn)
 
     student = ASDTransformer(mode="finetune").to(device)
@@ -66,11 +136,7 @@ def train_finetune(args):
         {"params": [p for n, p in student.named_parameters() if p.requires_grad and ("bias" not in n) and ("norm" not in n)], "weight_decay": 0.05},
         {"params": [p for n, p in student.named_parameters() if p.requires_grad and ("bias" in n or "norm" in n)], "weight_decay": 0.0},
     ]
-    # optimizer = optim.AdamW(params_groups, lr=args.lr)
-    optimizer = MTAdam(
-        student.parameters(),
-        lr=args.lr,
-        ) if args.adam_type == "MTAdam" else optim.AdamW(params_groups, lr=args.lr)
+    optimizer = optim.AdamW(params_groups, lr=args.lr)
 
     # === 路径和日志 ===
     time_tag = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -89,7 +155,16 @@ def train_finetune(args):
     history = {"train":  { "d_loss":[], "a_loss":[], "acc":[], "mae":[], "f1":[], "precision":[], "recall":[]}, "val": { "d_loss":[], "a_loss":[], "acc":[], "mae":[], "f1":[], "precision":[], "recall":[]}}
 
 
-    ce_loss_fn = nn.CrossEntropyLoss()
+    if args.loss_type == 'ce':
+        ce_loss_fn = nn.CrossEntropyLoss(weight=cls_weight if not args.use_sampler else None)
+    elif args.loss_type == 'bal':
+        ce_loss_fn = BalancedSoftmaxLoss(freq)
+    elif args.loss_type == 'focal':
+        ce_loss_fn = FocalLoss(alpha=cls_weight)
+    elif args.loss_type == 'ldam':
+        ldam_fn = LDAMLoss(freq)            # 先实例化；真正 forward 时要带 epoch
+    else:
+        raise ValueError('Unknown loss_type')
     mse_loss_fn = nn.MSELoss()
 
     start_time = time.time()
@@ -115,24 +190,23 @@ def train_finetune(args):
                 target_d = batch['target_d'].to(device)
                 target_a = batch['target_a'].to(device).float()
 
+
                 with torch.set_grad_enabled(phase == "train"):
                     d_out, a_out = student(s_a, s_s, s_d, s_a_idx, s_s_idx, s_d_idx, student_mask)
                     # === 主任务 loss ===
-                    loss_decision = ce_loss_fn(d_out, target_d.squeeze(-1).long())
+                    if args.loss_type == 'ldam':
+                        loss_decision = ldam_fn(d_out, target_d.squeeze(-1).long(),
+                                                epoch, args.defer_reweight, cls_weight)
+                    else:
+                        loss_decision = ce_loss_fn(d_out, target_d.squeeze(-1).long())
                     loss_action = mse_loss_fn(a_out, target_a)
 
                     if phase == "train":
-                        if args.adam_type == "MTAdam":
-                            loss_terms = [loss_decision, loss_action]
-                            ranks = [1,1]
-                            optimizer.step(loss_terms,ranks, None)  # MTAdam 会自动调用 backward + update
-                            optimizer.zero_grad()
-                        else:
-                            loss = loss_decision + loss_action
-                            loss.backward()
-                            clip_gradients(student, args.clip_grad)
-                            optimizer.step()
-                            optimizer.zero_grad()
+                        loss = loss_decision + loss_action
+                        loss.backward()
+                        clip_gradients(student, args.clip_grad)
+                        optimizer.step()
+                        optimizer.zero_grad()
 
                 total_d_loss += loss_decision.item()
                 total_a_loss += loss_action.item()
@@ -256,9 +330,13 @@ if __name__ == "__main__":
     parser.add_argument('--train_mode', type=str, choices=['linear', 'finetune'], default='finetune',
                         help="Training mode: linear (linear probing) or finetune (full fine-tuning)")
     parser.add_argument('--finetune_type', type=int, default=0, choices=[0, 1,2,3]) # 0: 全局 cls, 1: 最后几个 A/S
-    # adam type
-    parser.add_argument('--adam_type', type=str, default='AdamW', choices=['AdamW', 'MTAdam'],
-                        help="Optimizer type: AdamW, or MTAdam")
+
+    parser.add_argument('--loss_type', default='bal', choices=['ce', 'bal', 'focal', 'ldam'],
+                    help='bal = Balanced-Softmax, focal = α-Focal, ldam = LDAM-DRW')
+    parser.add_argument('--use_sampler', action='store_true',
+                        help='启用 WeightedRandomSampler 实时均衡 batch')
+    parser.add_argument('--defer_reweight', type=int, default=0,
+                    help='LDAM-DRW 中的 DRW 启动 epoch，0 表示不延迟')
 
     # args = parser.parse_args([
     # '--train_data_path', '../dino_data/dino_sequence_data/finetune_train.pt',
@@ -272,8 +350,11 @@ if __name__ == "__main__":
         '--train_data_path', '../dino_data/dino_sequence_data/finetune_train.pt',
         '--val_data_path', '../dino_data/dino_sequence_data/finetune_val.pt',
         '--pretrained_weights', '../dino_data/output_dino/pretrain1.0/weights/student_epoch100.pth',
-          '--output_dir', '../dino_data/output_dino',
-          '--finetune_type', '0'
+        '--output_dir', '../dino_data/output_dino',
+        '--finetune_type', '1',
+        '--train_mode', 'linear',
+        '--loss_type', 'ce',
+        '--use_sampler',
             ])
 
 
