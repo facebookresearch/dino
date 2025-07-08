@@ -69,8 +69,40 @@ class ASDTransformer(nn.Module):
             nn.LayerNorm(embed_dim*4),
             nn.Linear(embed_dim*4, 1)  # 回归
         )
+    def mask_pair_as(self,mask: torch.Tensor,
+                 a_idx: torch.Tensor,
+                 s_idx: torch.Tensor,
+                 mask_ratio: float) -> torch.Tensor:
+        """
+        成对遮盖 A / S：随机选出 mask_ratio 比例的时间步，
+        把对应的 A 与 S token 同时置 False。
 
-    def forward(self, a_tensor,s_tensor, d_tensor, a_idx, s_idx, d_idx, mask, finetune_type=0,mask_d=False):
+        参数
+        ----
+        mask        (B, T)    True=可见，False=被遮盖
+        a_idx       (N, 2)    对应 A token 的 [batch,row, col]
+        s_idx       (N, 2)    对应 S token 的 [batch,row, col]
+        mask_ratio  浮点，遮掉的“时间步”比例
+        """
+        assert a_idx.size(0) == s_idx.size(0), "A/S 数量需对应"
+
+        # —— 1. 统一保留当前仍可见的 A/S 对（以 A 为基准） ——
+        keep = mask[a_idx[:, 0], a_idx[:, 1]] & mask[s_idx[:, 0], s_idx[:, 1]]
+        a_idx = a_idx[keep]
+        s_idx = s_idx[keep]
+
+        total_pairs = a_idx.size(0)
+        num_to_mask = int(total_pairs * mask_ratio)
+
+        if num_to_mask > 0:
+            idx = torch.randperm(total_pairs, device=mask.device)[:num_to_mask]
+            rows_a, cols_a = a_idx[idx].T
+            rows_s, cols_s = s_idx[idx].T
+            mask[rows_a, cols_a] = False
+            mask[rows_s, cols_s] = False
+        return mask
+    
+    def forward(self, a_tensor,s_tensor, d_tensor, a_idx, s_idx, d_idx, mask, finetune_type=0,mask_d=False,mask_as=False,mask_as_ratio=0.3):
         """
         Args:
             a_tensor: (total_A, 1)
@@ -122,10 +154,16 @@ class ASDTransformer(nn.Module):
         # 拼接 mask
         cls_mask = torch.zeros(B, 1, dtype=torch.bool, device=device)
 
-        if mask_d:
-            # 如果需要 mask D token
-            mask = mask.clone()
-            mask[:, d_idx[:, 1]] = False  # 将 D token 的位置设为 False
+        mask = mask.clone()
+
+        # 1) 把 D 都关掉
+        if mask_d and d_idx.numel():
+            mask[d_idx[:,0], d_idx[:,1]] = False
+
+        # 2) 成对遮 A/S
+        if mask_as and a_idx.numel() and s_idx.numel():
+            mask = self.mask_pair_as(mask, a_idx, s_idx, mask_as_ratio)
+
         full_mask = torch.cat((cls_mask, ~mask), dim=1)
 
 

@@ -296,14 +296,15 @@ def train_dino(args):
             teacher_mask = batch['teacher_mask'].to(device).bool()
 
 
-            s_out = student(s_a, s_s, s_d, s_a_idx, s_s_idx, s_d_idx, student_mask,mask_d=True)
-            t_out = teacher(t_a, t_s, t_d, t_a_idx, t_s_idx, t_d_idx, teacher_mask)
-
+            s_out = student(s_a, s_s, s_d, s_a_idx, s_s_idx, s_d_idx, student_mask,mask_d=args.maskd)
+            t_out = teacher(t_a, t_s, t_d, t_a_idx, t_s_idx, t_d_idx, teacher_mask,mask_as=args.maskas,mask_as_ratio=args.mask_as_ratio)
+            if args.maskd:
             # print("s_out:", s_out.shape, "t_out:", t_out.shape)
-            # dinoloss = dino_loss(s_out, t_out, epoch)
-            # vicreg_loss = vicreg_loss_fn(s_out, t_out)
-            # loss = dinoloss + vicreg_loss*0
-            loss  = cosine_fpd_loss(s_out, t_out)
+                dinoloss = dino_loss(s_out, t_out, epoch)
+                vicreg_loss = vicreg_loss_fn(s_out, t_out)
+                loss = dinoloss + vicreg_loss*0
+            else:
+                loss  = cosine_fpd_loss(s_out, t_out)
             student_var = s_out.var(dim=1).mean().item()  # [B, D] → scalar
             teacher_var = t_out.var(dim=1).mean().item()
             student_variances.append(student_var)
@@ -416,6 +417,9 @@ if __name__ == "__main__":
     parser.add_argument('--warmup_teacher_temp', default=0.04, type=float, help="Initial value for the teacher temperature.")
     parser.add_argument('--teacher_temp', default=0.07, type=float, help="Final value (after linear warmup) of the teacher temperature.")
     parser.add_argument('--warmup_teacher_temp_epochs', default=30, type=int, help="Number of warmup epochs for the teacher temperature.")
+    parser.add_argument("--maskd", type=float, default=False)
+    parser.add_argument("--maskas", type=float, default=False)
+    parser.add_argument("--mask_as_ratio", type=float, default=0.3, help="Mask A/S ratio for maskas")
 
     args = parser.parse_args([
         "--data_path", "../dino_data/dino_sequence_data/pretrain.pt",
@@ -428,7 +432,10 @@ if __name__ == "__main__":
         "--momentum_teacher", "0.996",
         "--warmup_teacher_temp", "0.08",
         "--teacher_temp", "0.10",
-        "--warmup_teacher_temp_epochs", "25"
+        "--warmup_teacher_temp_epochs", "25",
+        '--maskd', 'True',
+        '--maskas', 'True',
+        '--mask_as_ratio', '0.3',
     ])
     train_dino(args)
     
