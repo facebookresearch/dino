@@ -425,7 +425,7 @@ if __name__ == "__main__":
         "--lr", "1e-4",
         "--out_dim", "256",
         "--save_interval", "10",
-        "--momentum_teacher", "0.99",
+        "--momentum_teacher", "0.996",
         "--warmup_teacher_temp", "0.08",
         "--teacher_temp", "0.10",
         "--warmup_teacher_temp_epochs", "25"
