@@ -111,7 +111,7 @@ def train_finetune(args):
                 target_a = batch['target_a'].to(device).float()
 
                 with torch.set_grad_enabled(phase == "train"):
-                    d_out, a_out = student(s_a, s_s, s_d, s_a_idx, s_s_idx, s_d_idx, student_mask)
+                    d_out, a_out = student(s_a, s_s, s_d, s_a_idx, s_s_idx, s_d_idx, student_mask,mask_d=args.maskd, finetune_type=args.finetune_type)
                     # === 主任务 loss ===
                     loss_decision = ce_loss_fn(d_out, target_d.squeeze(-1).long())
                     loss_action = mse_loss_fn(a_out, target_a)
@@ -247,9 +247,8 @@ if __name__ == "__main__":
     parser.add_argument('--train_mode', type=str, choices=['linear', 'finetune'], default='finetune',
                         help="Training mode: linear (linear probing) or finetune (full fine-tuning)")
     parser.add_argument('--finetune_type', type=int, default=0, choices=[0, 1,2,3]) # 0: 全局 cls, 1: 最后几个 A/S
-    # adam type
-    parser.add_argument('--adam_type', type=str, default='AdamW', choices=['AdamW', 'MTAdam'],
-                        help="Optimizer type: AdamW, or MTAdam")
+    parser.add_argument("--maskd", type=float, default=False)
+
 
     # args = parser.parse_args([
     # '--train_data_path', '../dino_data/dino_sequence_data/finetune_train.pt',
@@ -265,6 +264,7 @@ if __name__ == "__main__":
         '--pretrained_weights', '../dino_data/output_dino/pretrain_2.0/weights/student_epoch100.pth',
           '--output_dir', '../dino_data/output_dino',
           '--finetune_type', '0',
+          '--maskd', 'False',
         #   '--train_mode', 'linear',
             ])
 
