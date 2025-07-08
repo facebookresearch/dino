@@ -296,7 +296,7 @@ def train_dino(args):
             teacher_mask = batch['teacher_mask'].to(device).bool()
 
 
-            s_out = student(s_a, s_s, s_d, s_a_idx, s_s_idx, s_d_idx, student_mask)
+            s_out = student(s_a, s_s, s_d, s_a_idx, s_s_idx, s_d_idx, student_mask,mask_d=True)
             t_out = teacher(t_a, t_s, t_d, t_a_idx, t_s_idx, t_d_idx, teacher_mask)
 
             # print("s_out:", s_out.shape, "t_out:", t_out.shape)

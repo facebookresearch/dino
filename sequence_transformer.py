@@ -70,7 +70,7 @@ class ASDTransformer(nn.Module):
             nn.Linear(embed_dim*4, 1)  # 回归
         )
 
-    def forward(self, a_tensor,s_tensor, d_tensor, a_idx, s_idx, d_idx, mask, finetune_type=0):
+    def forward(self, a_tensor,s_tensor, d_tensor, a_idx, s_idx, d_idx, mask, finetune_type=0,mask_d=False):
         """
         Args:
             a_tensor: (total_A, 1)
@@ -121,7 +121,14 @@ class ASDTransformer(nn.Module):
 
         # 拼接 mask
         cls_mask = torch.zeros(B, 1, dtype=torch.bool, device=device)
+
+        if mask_d:
+            # 如果需要 mask D token
+            mask = mask.clone()
+            mask[:, d_idx[:, 1]] = False  # 将 D token 的位置设为 False
         full_mask = torch.cat((cls_mask, ~mask), dim=1)
+
+
 
         # 编码器
         x = x.transpose(0, 1)  # (T+1, B, D)
