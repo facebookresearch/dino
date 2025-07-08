@@ -150,24 +150,31 @@ def my_collate_fn(batch):
         "student_mask": torch.stack([item['student_mask'] for item in batch]),
         "teacher_mask": torch.stack([item['teacher_mask'] for item in batch])
     }
-def cosine_fpd_loss(stu_list, tea_list):
+def cosine_fpd_loss(stu_out: torch.Tensor,
+                    tea_out: torch.Tensor) -> torch.Tensor:
     """
-    stu_list / tea_list : 由若干 (B,D) tensor 组成的 tuple
-    返回标量 FPD 损失
-    """
-    V = len(stu_list)
-    if V == 1:                                     # 单视角特例
-        return 1.0 - (stu_list[0] * tea_list[0].detach()).sum(dim=-1).mean()
+    Future-Past Distillation (FPD) 损失：
+        L = 1 - cos_sim(stu_out, tea_out)
 
-    total = 0.0
-    pairs = 0
-    for i, q in enumerate(tea_list):
-        for j, p in enumerate(stu_list):
-            if i == j:
-                continue
-            total += (1.0 - (p * q.detach()).sum(dim=-1).mean())  # ← 已是标量 tensor
-            pairs += 1
-    return total / pairs
+    参数
+    ----
+    stu_out : Tensor  (N, 256) 或 (256,)
+        学生网络的 clip 级向量
+    tea_out : Tensor  (N, 256) 或 (256,)
+        教师网络的 clip 级向量
+
+    返回
+    ----
+    Tensor  标量 loss
+    """
+    # 保证张量维度至少 2 维，便于批量计算
+    if stu_out.dim() == 1:
+        stu_out = stu_out.unsqueeze(0)
+        tea_out = tea_out.unsqueeze(0)
+
+    # 余弦相似度 (已内部 L2 归一化) → 取 1 - cos
+    loss = 1.0 - F.cosine_similarity(stu_out, tea_out, dim=-1)
+    return loss.mean()
 # ============ 主训练函数 ============
 def train_dino(args):
     # 生成时间戳
@@ -292,13 +299,11 @@ def train_dino(args):
             s_out = student(s_a, s_s, s_d, s_a_idx, s_s_idx, s_d_idx, student_mask)
             t_out = teacher(t_a, t_s, t_d, t_a_idx, t_s_idx, t_d_idx, teacher_mask)
 
-            s_nor = F.normalize(s_out, dim=-1)   # (B, D)
-            t_nor = F.normalize(t_out, dim=-1)   # (B, D)
             # print("s_out:", s_out.shape, "t_out:", t_out.shape)
             # dinoloss = dino_loss(s_out, t_out, epoch)
             # vicreg_loss = vicreg_loss_fn(s_out, t_out)
             # loss = dinoloss + vicreg_loss*0
-            loss  = cosine_fpd_loss(s_nor, t_nor)
+            loss  = cosine_fpd_loss(s_out, t_out)
             student_var = s_out.var(dim=1).mean().item()  # [B, D] → scalar
             teacher_var = t_out.var(dim=1).mean().item()
             student_variances.append(student_var)
