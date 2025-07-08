@@ -70,34 +70,35 @@ class ASDTransformer(nn.Module):
             nn.Linear(embed_dim*4, 1)  # 回归
         )
     def mask_pair_as(self,mask: torch.Tensor,
-                 a_idx: torch.Tensor,
-                 s_idx: torch.Tensor,
-                 mask_ratio: float) -> torch.Tensor:
+                                a_idx: torch.Tensor,
+                                s_idx: torch.Tensor,
+                                ratio: float) -> torch.Tensor:
         """
-        成对遮盖 A / S：随机选出 mask_ratio 比例的时间步，
-        把对应的 A 与 S token 同时置 False。
+        对每条序列单独计算可见 A/S 对数，随机遮掉相同比例（向下取整）。
 
-        参数
-        ----
-        mask        (B, T)    True=可见，False=被遮盖
-        a_idx       (N, 2)    对应 A token 的 [batch,row, col]
-        s_idx       (N, 2)    对应 S token 的 [batch,row, col]
-        mask_ratio  浮点，遮掉的“时间步”比例
+        mask   (B, T)  bool  True=可见
+        a_idx  (N, 2)  long  A token 索引 [batch, col]
+        s_idx  (N, 2)  long  S token 索引 [batch, col]
+        ratio  float   遮盖比例 0~1
         """
-        assert a_idx.size(0) == s_idx.size(0), "A/S 数量需对应"
+        assert a_idx.size(0) == s_idx.size(0), "A、S 数量需一致"
 
-        # —— 1. 统一保留当前仍可见的 A/S 对（以 A 为基准） ——
-        keep = mask[a_idx[:, 0], a_idx[:, 1]] & mask[s_idx[:, 0], s_idx[:, 1]]
-        a_idx = a_idx[keep]
-        s_idx = s_idx[keep]
+        # 当前仍可见且成对存在
+        keep = mask[a_idx[:,0], a_idx[:,1]] & mask[s_idx[:,0], s_idx[:,1]]
+        a_idx, s_idx = a_idx[keep], s_idx[keep]
 
-        total_pairs = a_idx.size(0)
-        num_to_mask = int(total_pairs * mask_ratio)
-
-        if num_to_mask > 0:
-            idx = torch.randperm(total_pairs, device=mask.device)[:num_to_mask]
-            rows_a, cols_a = a_idx[idx].T
-            rows_s, cols_s = s_idx[idx].T
+        # ---- 按序列逐条处理 ----
+        for b in torch.unique(a_idx[:,0]):
+            sel = (a_idx[:,0] == b)             # 属于该 batch 的行
+            n_pairs = sel.sum().item()
+            if n_pairs == 0:
+                continue
+            k = int(n_pairs * ratio)            # 固定要遮掉多少对
+            if k == 0:
+                continue
+            rand = torch.randperm(n_pairs, device=mask.device)[:k]
+            rows_a, cols_a = a_idx[sel][rand].T
+            rows_s, cols_s = s_idx[sel][rand].T
             mask[rows_a, cols_a] = False
             mask[rows_s, cols_s] = False
         return mask
