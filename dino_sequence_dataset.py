@@ -20,15 +20,18 @@ class DinoSequenceDataset(Dataset):
         return [type_id_map.get(token["type"], -1) for token in seq]  # -1 表示 PAD，用 mask 区分
 
     def pad_left(self, seq, target_len):
+        # print('seq',len(seq),'seq[-6:]',seq[-6:])
+        if target_len == len(seq):
+            return seq, [1] * len(seq)
         pad_len = target_len - len(seq)
-        # if pad_len > 0:
-        #     print(f"[Padding] Added {pad_len} PAD tokens")
+        # print(f"[Padding] Padding {pad_len} tokens to the left of the sequence, total length: {target_len}")
         pad_token = [{'type': 'A', 'value': 0.0},
                      {'type': 'S', 'value': {'dis': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 'v': [0, 0, 0]}},
                      {'type': 'D', 'value': 0}]
         padded = pad_token * int(pad_len/3) + seq
         mask = [0] * pad_len + [1] * len(seq)
-        return padded[-target_len:], mask[-target_len:]
+        # print(f"[Padding] Padded sequence length: {len(padded)}, mask length: {len(mask)}")
+        return padded[:], mask[:]
     
     def value_to_tensor(self, seq):
         value_list = []
@@ -74,8 +77,12 @@ class DinoSequenceDataset(Dataset):
         ts = item['ts']
 
         max_tokens = self.max_teacher_tokens if self.mode != 'finetune' else self.max_student_tokens
-
-        padded_seq, mask = self.pad_left(token_seq[-max_tokens:], max_tokens)
+        # print('max_tokens:', max_tokens, 'len(token_seq):', len(token_seq))
+        # print('token_seq:', token_seq[-6:])
+        if self.mode == "pretrain":
+            padded_seq, mask = self.pad_left(token_seq[-max_tokens:], max_tokens)
+        else:
+            padded_seq, mask = self.pad_left(token_seq[-max_tokens-4:-4], max_tokens)
 
 
         # 学生
@@ -104,12 +111,11 @@ class DinoSequenceDataset(Dataset):
             teacher_a_tensor = teacher_s_tensor = teacher_d_tensor = None
 
         # 提取目标 D/A
-        d_index = self.max_student_tokens
+        d_index = self.max_student_tokens if self.mode != 'finetune' else len(token_seq) - 4
         a_index = d_index + 1
         full_seq = padded_seq if self.mode != 'finetune' else token_seq
 
         target_d, target_a, target_d_tensor, target_a_tensor = None, None, None, None
-
         if d_index < len(full_seq) and full_seq[d_index]['type'] == 'D':
             target_d = full_seq[d_index]
             target_d_tensor = torch.tensor(target_d['value'], dtype=torch.long).view(1)
@@ -155,28 +161,32 @@ if __name__ == "__main__":
     # 用法示例：
     # 加载 pretrain 数据
 
-    pretrain_dataset = DinoSequenceDataset("../dino_data/dino_sequence_data/pretrain.pt", mode='pretrain')
-    for i in range(100):
-        sample = pretrain_dataset[i]
-    sample = pretrain_dataset[7]
-    print("--------------len",len(sample['teacher_seq']),len(sample['student_seq']))
-    print("--------------teacher_seq:", sample['teacher_seq'][0])
-    print("----------------student_seq:", sample['student_seq'][-1])
-    print("---------------target_d:", sample['target_d'])
-    print("----------------target_a:", sample['target_a'])
-    print("----------------student student_type_idx:", sample['student_type_idx'])
+    # pretrain_dataset = DinoSequenceDataset("../dino_data/dino_sequence_data/pretrain.pt", mode='pretrain')
+    # for i in range(100):
+    #     sample = pretrain_dataset[i]
+    #     print(sample['target_d'], sample['target_a'])
+    # sample = pretrain_dataset[7]
+    # print("--------------len",len(sample['teacher_seq']),len(sample['student_seq']))
+    # print("--------------teacher_seq:", sample['teacher_seq'])
+    # print("----------------student_seq:", sample['student_seq'])
+    # print("---------------target_d:", sample['target_d'])
+    # print("----------------target_a:", sample['target_a'])
+    # print("----------------student student_type_idx:", sample['student_type_idx'])
     # print("----------------person_id:", sample['person_id'])
     # print("----------------exp_id:", sample['exp_id'])
     # print("----------------ts:", sample['ts'])
 
     # 加载 finetune 数据
 
-    # finetune_dataset = DinoSequenceDataset("../dino_data/dino_sequence_data/finetune_train.pt", mode='finetune')
-    # for i in range(100):
-    #     sample = finetune_dataset[i]
-    # sample = finetune_dataset[51]
+    finetune_dataset = DinoSequenceDataset("../dino_data/dino_sequence_data/finetune_train.pt", mode='finetune')
+    for i in range(100):
+        sample = finetune_dataset[i]
+        print(sample['target_d'], sample['target_a'])
+    
+    # sample = finetune_dataset[0]
+    # print(sample['student_seq'][-1], sample['target_d'], sample['target_a'])
     # print("--------------len",len(sample['student_seq']))
-    # print("----------------student_seq:", sample['student_seq'][89])
+    # print("----------------student_seq:", sample['student_seq'])
     # print("---------------target_d:", sample['target_d'])
     # print("----------------target_d_tensor:", sample['target_d_tensor'])
     # print("----------------target_a:", sample['target_a'])

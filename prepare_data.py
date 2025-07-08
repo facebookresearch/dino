@@ -32,9 +32,9 @@ for i, sample in tqdm(enumerate(data), desc="Processing samples", total=len(data
     a_seq = sample['action_seq']
 
     min_len = min(len(dis_seq), len(v_seq), len(d_seq), len(a_seq))
-    # if min_len < IGN_LEN:
-    #     # print(len(dis_seq), f"跳过 {pid} 的数据，长度不足{IGN_LEN}")
-    #     continue
+    if min_len < 6:
+        # print(len(dis_seq), f"跳过 {pid} 的数据，长度不足{IGN_LEN}")
+        continue
 
     merged_seq = []
     for i in range(min(min_len, int(TEACHER_TOKEN_LIMIT / 3))):

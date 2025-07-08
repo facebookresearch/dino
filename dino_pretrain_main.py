@@ -80,7 +80,7 @@ class DINOLoss(nn.Module):
                  warmup_teacher_temp_epochs, nepochs, center_momentum=0.9,
                  use_cls_token_only=False):
         super().__init__()
-        self.student_temp = 0.1
+        self.student_temp = 0.18
         self.center_momentum = center_momentum
         self.use_cls_token_only = use_cls_token_only
         self.register_buffer("center", torch.zeros(1, out_dim))
@@ -150,7 +150,24 @@ def my_collate_fn(batch):
         "student_mask": torch.stack([item['student_mask'] for item in batch]),
         "teacher_mask": torch.stack([item['teacher_mask'] for item in batch])
     }
+def cosine_fpd_loss(stu_list, tea_list):
+    """
+    stu_list / tea_list : 由若干 (B,D) tensor 组成的 tuple
+    返回标量 FPD 损失
+    """
+    V = len(stu_list)
+    if V == 1:                                     # 单视角特例
+        return 1.0 - (stu_list[0] * tea_list[0].detach()).sum(dim=-1).mean()
 
+    total = 0.0
+    pairs = 0
+    for i, q in enumerate(tea_list):
+        for j, p in enumerate(stu_list):
+            if i == j:
+                continue
+            total += (1.0 - (p * q.detach()).sum(dim=-1).mean())  # ← 已是标量 tensor
+            pairs += 1
+    return total / pairs
 # ============ 主训练函数 ============
 def train_dino(args):
     # 生成时间戳
@@ -237,7 +254,6 @@ def train_dino(args):
         {"params": [p for n, p in student.named_parameters() if p.requires_grad and ("bias" in n or "norm" in n)], "weight_decay": 0.0},
     ]
     optimizer = torch.optim.AdamW(params_groups, lr=args.lr)
-    scaler = GradScaler() if args.use_fp16 and GradScaler is not None else None
 
     momentum_schedule = [args.momentum_teacher] * args.epochs * len(dataloader)
 
@@ -272,43 +288,27 @@ def train_dino(args):
             student_mask = batch['student_mask'].to(device).bool()
             teacher_mask = batch['teacher_mask'].to(device).bool()
 
-            if scaler:
-                with autocast():
-                    s_out = student(s_a, s_s, s_d, s_a_idx, s_s_idx, s_d_idx, student_mask)
-                    t_out = teacher(t_a, t_s, t_d, t_a_idx, t_s_idx, t_d_idx, teacher_mask)
-                    dinoloss = dino_loss(s_out, t_out, epoch)
-                    vicreg_loss = vicreg_loss_fn(s_out, t_out)
-                    loss = dinoloss + vicreg_loss*0
-                    student_var = s_out.var(dim=1).mean().item()  # [B, D] → scalar
-                    teacher_var = t_out.var(dim=1).mean().item()
-                    student_variances.append(student_var)
-                    teacher_variances.append(teacher_var)
-                scaler.scale(loss).backward()
-                if args.clip_grad:
-                    scaler.unscale_(optimizer)
-                    clip_gradients(student, args.clip_grad)
-                cancel_gradients_last_layer(epoch, student, args.freeze_last_layer)
-                scaler.step(optimizer)
-                scaler.update()
-                optimizer.zero_grad()
-            else:
-                s_out = student(s_a, s_s, s_d, s_a_idx, s_s_idx, s_d_idx, student_mask)
-                t_out = teacher(t_a, t_s, t_d, t_a_idx, t_s_idx, t_d_idx, teacher_mask)
-                # print("s_out:", s_out.shape, "t_out:", t_out.shape)
-                dinoloss = dino_loss(s_out, t_out, epoch)
-                vicreg_loss = vicreg_loss_fn(s_out, t_out)
-                print("dinoloss:", dinoloss.item(), "vicreg_loss:", vicreg_loss.item())
-                loss = dinoloss + vicreg_loss*0
-                student_var = s_out.var(dim=1).mean().item()  # [B, D] → scalar
-                teacher_var = t_out.var(dim=1).mean().item()
-                student_variances.append(student_var)
-                teacher_variances.append(teacher_var)
-                loss.backward()
-                if args.clip_grad:
-                    clip_gradients(student, args.clip_grad)
-                cancel_gradients_last_layer(epoch, student, args.freeze_last_layer)
-                optimizer.step()
-                optimizer.zero_grad()
+
+            s_out = student(s_a, s_s, s_d, s_a_idx, s_s_idx, s_d_idx, student_mask)
+            t_out = teacher(t_a, t_s, t_d, t_a_idx, t_s_idx, t_d_idx, teacher_mask)
+
+            s_nor = F.normalize(s_out, dim=-1)   # (B, D)
+            t_nor = F.normalize(t_out, dim=-1)   # (B, D)
+            # print("s_out:", s_out.shape, "t_out:", t_out.shape)
+            # dinoloss = dino_loss(s_out, t_out, epoch)
+            # vicreg_loss = vicreg_loss_fn(s_out, t_out)
+            # loss = dinoloss + vicreg_loss*0
+            loss  = cosine_fpd_loss(s_nor, t_nor)
+            student_var = s_out.var(dim=1).mean().item()  # [B, D] → scalar
+            teacher_var = t_out.var(dim=1).mean().item()
+            student_variances.append(student_var)
+            teacher_variances.append(teacher_var)
+            loss.backward()
+            if args.clip_grad:
+                clip_gradients(student, args.clip_grad)
+            cancel_gradients_last_layer(epoch, student, args.freeze_last_layer)
+            optimizer.step()
+            optimizer.zero_grad()
 
             # === EMA update teacher ===
             with torch.no_grad():
@@ -411,8 +411,19 @@ if __name__ == "__main__":
     parser.add_argument('--warmup_teacher_temp', default=0.04, type=float, help="Initial value for the teacher temperature.")
     parser.add_argument('--teacher_temp', default=0.07, type=float, help="Final value (after linear warmup) of the teacher temperature.")
     parser.add_argument('--warmup_teacher_temp_epochs', default=30, type=int, help="Number of warmup epochs for the teacher temperature.")
-    args = parser.parse_args()
-    args.data_path = "../dino_data/dino_sequence_data/pretrain.pt"
-    args.output_dir = "../dino_data/output_dino"
+
+    args = parser.parse_args([
+        "--data_path", "../dino_data/dino_sequence_data/pretrain.pt",
+        "--output_dir", "../dino_data/output_dino",
+        "--epochs", "100",
+        "--batch_size", "32",
+        "--lr", "1e-4",
+        "--out_dim", "256",
+        "--save_interval", "10",
+        "--momentum_teacher", "0.99",
+        "--warmup_teacher_temp", "0.08",
+        "--teacher_temp", "0.10",
+        "--warmup_teacher_temp_epochs", "25"
+    ])
     train_dino(args)
     
