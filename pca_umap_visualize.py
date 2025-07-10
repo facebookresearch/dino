@@ -1,7 +1,7 @@
 import pickle
 import numpy as np
 from sklearn.decomposition import PCA
-import umap
+import umap.umap_ as umap
 import pyvista as pv
 from pathlib import Path
 import argparse
@@ -77,6 +77,33 @@ def plot_each_person(umap_out, person_labels, person_to_color, output_dir):
         plotter.show(screenshot=str(out_path))
         print(f"✅ Saved plot to {out_path}")
 
+def plot_person_in_context(umap_out, person_labels, person_to_color, output_dir):
+    """
+    在总体灰色点云背景上高亮每个 person 自己的点。
+    """
+    unique_persons = sorted(set(person_labels))
+    grey = (0.7, 0.7, 0.7)          # 背景灰，取一个中性亮度
+
+    # 预先把全体云图准备好（提升一点效率，避免每次都复制）
+    background_cloud = pv.PolyData(umap_out)
+
+    for person in unique_persons:
+        # —— 选中该 person 的点 —— #
+        mask = np.array([p == person for p in person_labels])
+        person_points = umap_out[mask]
+        person_cloud = pv.PolyData(person_points)
+        color = person_to_color[person]
+
+        # —— 画图 —— #
+        plotter = pv.Plotter(off_screen=True)
+        plotter.add_points(background_cloud, color=grey, point_size=4)
+        plotter.add_points(person_cloud, color=color, point_size=6)
+        plotter.add_axes()
+
+        out_path = Path(output_dir) / f"person_{person}_in_context.png"
+        plotter.show(screenshot=str(out_path))
+        print(f"✅ Saved context plot to {out_path}")
+
 def main(args):
     cls_data = load_cls_data(args.cls_path)
     print(f"✅ Loaded {len(cls_data)} CLS entries from {args.cls_path}")
@@ -101,6 +128,8 @@ def main(args):
 
     plot_each_person(umap_out, person_labels, person_to_color, Path(args.output_dir))
 
+    plot_person_in_context(umap_out, person_labels, person_to_color, Path(args.output_dir))
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--cls_path", type=str, required=True, help="Path to cls_by_person.pkl")
@@ -114,7 +143,7 @@ if __name__ == "__main__":
             '--output_dir', '../dino_data/output_dino/cls_vis_output',
             '--pca_dim', '30',
             '--umap_dim', '3',
-            # '--load_model',
+            '--load_model',
         ]
     )
     main(args)
