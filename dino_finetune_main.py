@@ -154,6 +154,8 @@ def train_finetune(args):
 
             pbar = tqdm(loader, desc=f"{phase.capitalize()} Epoch {epoch+1}/{args.epochs}")
             for batch in pbar:
+                if phase == "train":
+                    optimizer.zero_grad(set_to_none=True)
                 s_a = batch['s_a'].to(device)
                 s_s = batch['s_s'].to(device)
                 s_d = batch['s_d'].to(device)
@@ -186,7 +188,6 @@ def train_finetune(args):
                         loss.backward()
                         clip_gradients(student, args.clip_grad)
                         optimizer.step()
-                        optimizer.zero_grad()
 
                 total_d_loss += loss_decision.item()
                 total_a_loss += loss_action.item()
@@ -217,8 +218,8 @@ def train_finetune(args):
 
             precision, recall, f1, _ = precision_recall_fscore_support(all_targets, all_preds, average="macro")
             history[phase]["f1"].append(f1)
-            history[phase]["precision"] = precision
-            history[phase]["recall"] = recall
+            history[phase]["precision"].append(precision)
+            history[phase]["recall"].append(recall)
             with open(csv_path, mode='a', newline='') as f:
                 writer = csv.writer(f)
                 writer.writerow([epoch+1, phase, avg_d_loss, avg_a_loss, avg_acc, avg_mae, precision, recall, f1])
