@@ -135,10 +135,7 @@ def main(args):
     plt.savefig(figures_dir / "test_bar_metrics.png")
     plt.close()
 
-
-
-    
-
+    plt_confusion_matrix(y_true, y_pred, figures_dir)
 
 if __name__ == "__main__":
     import argparse
