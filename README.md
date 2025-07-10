@@ -1,5 +1,10 @@
 :new: *Please check out our more recent [DINOv2](https://github.com/facebookresearch/dinov2) effort in the same line of work.*
 
+python3 -m venv decision-dino
+source decision-dino/bin/activate
+pip install -r decision-dino-requirements.txt
+
+
 # Self-Supervised Vision Transformers with DINO
 
 PyTorch implementation and pretrained models for DINO. For details, see **Emerging Properties in Self-Supervised Vision Transformers**.  
