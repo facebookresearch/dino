@@ -170,9 +170,20 @@ def train_finetune(args):
                 plt.figure(figsize=(6,5))
                 sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
                 plt.title(f"Confusion Matrix")
-                plt.xlabel('Predicted')
-                plt.ylabel('True')
+                plt.xlabel('Prediction')
+                plt.ylabel('Groundtruth')
                 plt.savefig(figures_dir / f"confusion_matrix_epoch{epoch+1}.png")
+                plt.close()
+                cm_perc = cm / (cm.sum(axis=1, keepdims=True) + 1e-9)
+                plt.figure(figsize=(6, 5))
+                sns.heatmap(cm_perc * 100,  # 乘 100 直接显示百分比
+                            annot=True, fmt='.1f', cmap='Greens',
+                            cbar_kws={'label': 'Percentage (%)'})
+                plt.title("Confusion Matrix")
+                plt.xlabel('Prediction')
+                plt.ylabel('Groundtruth')
+                plt.tight_layout()
+                plt.savefig(figures_dir / f"confusion_matrix_norm_epoch{epoch+1}.png")
                 plt.close()
                 ckpt_path = weights_dir / f"student_finetune_epoch{epoch+1}.pth"
                 torch.save(student.state_dict(), ckpt_path)

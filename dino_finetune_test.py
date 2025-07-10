@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from tqdm import tqdm
 from datetime import datetime
+import seaborn as sns
 
 from dino_sequence_dataset import DinoSequenceDataset  
 from sequence_transformer import ASDTransformer  
@@ -105,8 +106,22 @@ def main(args):
     disp = ConfusionMatrixDisplay(confusion_matrix=cm)
     disp.plot(cmap='Blues')
     plt.title("Test Confusion Matrix")
+    plt.xlabel('Prediction')
+    plt.ylabel('Groundtruth')
     plt.savefig(figures_dir / "test_confusion_matrix.png")
     plt.close()
+    cm_perc = cm / (cm.sum(axis=1, keepdims=True) + 1e-9)
+    plt.figure(figsize=(6, 5))
+    sns.heatmap(cm_perc * 100,  # 乘 100 直接显示百分比
+                annot=True, fmt='.1f', cmap='Greens',
+                cbar_kws={'label': 'Percentage (%)'})
+    plt.title("Confusion Matrix")
+    plt.xlabel('Prediction')
+    plt.ylabel('Groundtruth')
+    plt.tight_layout()
+    plt.savefig(figures_dir / f"confusion_matrix_norm.png")
+    plt.close()
+    
 
 
 if __name__ == "__main__":
