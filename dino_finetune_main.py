@@ -49,6 +49,9 @@ def my_collate_fn(batch):
         "student_mask": torch.stack([item['student_mask'] for item in batch]),
         "target_d": torch.stack([item['target_d_tensor'] for item in batch]),
         "target_a": torch.stack([item['target_a_tensor'] for item in batch]),
+        "person_id": [item['person_id'] for item in batch],
+        "exp_id": [item['exp_id'] for item in batch],
+        "ts": [item['ts'] for item in batch],
     }
 
 def plot_confusion_matrix(all_targets, all_preds, epoch, figures_dir):

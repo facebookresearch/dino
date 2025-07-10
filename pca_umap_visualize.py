@@ -4,6 +4,7 @@ from sklearn.decomposition import PCA
 import umap.umap_ as umap
 import pyvista as pv
 from pathlib import Path
+from sklearn.manifold import TSNE
 import argparse
 
 def load_cls_data(cls_path):
@@ -28,24 +29,35 @@ def save_reducers(pca, umap_model, output_dir):
         pickle.dump(umap_model, f)
     print(f"✅ Saved PCA and UMAP models to {output_dir}")
 
-def load_reducers(output_dir):
+def load_reducers(output_dir, reducer_name):
     with open(Path(output_dir) / "pca_model.pkl", "rb") as f:
         pca = pickle.load(f)
-    with open(Path(output_dir) / "umap_model.pkl", "rb") as f:
-        umap_model = pickle.load(f)
+    if reducer_name == "umap":
+        with open(Path(output_dir) / "umap_model.pkl", "rb") as f:
+            second_model = pickle.load(f)
+    elif reducer_name == "tsne":
+        second_model = TSNE()
     print(f"✅ Loaded PCA and UMAP models from {output_dir}")
-    return pca, umap_model
+    return pca, second_model
 
-def apply_pca_umap(all_cls, pca_dim, umap_dim):
-    print("Running PCA...")
-    pca = PCA(n_components=pca_dim)
-    pca_out = pca.fit_transform(all_cls)
+def apply_pca_reduce(all_cls, pca_dim, reducer_name, reducer_kw):
+    """返回 (reduced_out, pca_obj, reducer_obj_or_None)"""
+    print(f"Running PCA n={pca_dim} …")
+    pca = PCA(n_components=pca_dim).fit(all_cls)
+    pca_out = pca.transform(all_cls)
 
-    print("Running UMAP...")
-    reducer = umap.UMAP(n_components=umap_dim, random_state=42)
-    umap_out = reducer.fit_transform(pca_out)
-
-    return umap_out, pca, reducer
+    if reducer_name == "umap":
+        print("Running UMAP …")
+        reducer = umap.UMAP(**reducer_kw).fit(pca_out)
+        reduced = reducer.transform(pca_out)
+    elif reducer_name == "tsne":
+        print("Running t-SNE …")
+        reducer = TSNE(**reducer_kw)
+        reduced = reducer.fit_transform(pca_out)
+        reducer = None                     # tsne 无 transform
+    else:
+        raise ValueError("reducer must be 'umap' or 'tsne'")
+    return reduced, pca, reducer
 
 def generate_colors(person_labels):
     unique_persons = sorted(set(person_labels))
@@ -110,25 +122,35 @@ def main(args):
 
     all_cls, person_labels = collect_cls_and_labels(cls_data)
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
-    print(args.load_model)
+
     if args.load_model:
         # 加载模型并转换
-        pca, umap_model = load_reducers(args.output_dir)
+        pca, second_model = load_reducers(args.output_dir,args.reducer)
         pca_out = pca.transform(all_cls)
-        umap_out = umap_model.transform(pca_out)
+        umap_out = second_model.transform(pca_out)
     else:
         # 训练新模型
-        umap_out, pca, umap_model = apply_pca_umap(all_cls, args.pca_dim, args.umap_dim)
-        save_reducers(pca, umap_model, args.output_dir)
+        umap_out, pca, second_model = apply_pca_reduce(all_cls, args.pca_dim, args.reducer,
+                                                     {"n_components": args.umap_dim, "random_state": 42})
+        save_reducers(pca, second_model, args.output_dir)
 
     color_array, person_to_color = generate_colors(person_labels)
 
-    all_out_path = Path(args.output_dir) / "all_persons_point_cloud.png"
-    plot_with_pyvista(umap_out, color_array, all_out_path)
+    # save the PCA and UMAP output
+    pca_out_path = Path(args.output_dir) / "pca_output.npy"
+    np.save(pca_out_path, pca.transform(all_cls))
+    print(f"✅ Saved PCA output to {pca_out_path}")
+    umap_out_path = Path(args.output_dir) / "second_output.npy"
+    np.save(umap_out_path, umap_out)
+    print(f"✅ Saved second output to {umap_out_path}")
 
-    plot_each_person(umap_out, person_labels, person_to_color, Path(args.output_dir))
+    if args.pic:
+        all_out_path = Path(args.output_dir) / "all_persons_point_cloud.png"
+        plot_with_pyvista(umap_out, color_array, all_out_path)
 
-    plot_person_in_context(umap_out, person_labels, person_to_color, Path(args.output_dir))
+        plot_each_person(umap_out, person_labels, person_to_color, Path(args.output_dir))
+
+        plot_person_in_context(umap_out, person_labels, person_to_color, Path(args.output_dir))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -137,13 +159,18 @@ if __name__ == "__main__":
     parser.add_argument("--pca_dim", type=int, default=20, help="PCA target dimension before UMAP")
     parser.add_argument("--umap_dim", type=int, default=3, help="UMAP target dimension (default 3)")
     parser.add_argument("--load_model", action="store_true", help="If set, load PCA/UMAP models from output_dir")
+    parser.add_argument("--pic", action="store_true", help="If set, save the point cloud plots")
+    parser.add_argument("--reducer", type=str, choices=["umap", "tsne"], default="umap",
+                        help="Reducer to use after PCA (default: umap)")
     args = parser.parse_args(
         [
             '--cls_path', '../dino_data/output_dino/cls_by_person.pkl',
             '--output_dir', '../dino_data/output_dino/cls_vis_output',
-            '--pca_dim', '30',
-            '--umap_dim', '3',
-            '--load_model',
+            # '--pca_dim', '50',
+            # '--umap_dim', '20',
+            # '--load_model',
+            '--pic',
+            '--reducer', 'umap'
         ]
     )
     main(args)
