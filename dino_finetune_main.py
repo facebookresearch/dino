@@ -311,16 +311,17 @@ if __name__ == "__main__":
     # '--output_dir', '../dino_data/output_dino',
     # '--finetune_type', '0'
     # ])
-
-    args = parser.parse_args([
-        '--train_data_path', '../dino_data/dino_sequence_data/finetune_train.pt',
-        '--val_data_path', '../dino_data/dino_sequence_data/finetune_val.pt',
-        '--pretrained_weights', '../dino_data/output_dino/pretrain_maskd/weights/student_epoch100.pth',
-          '--output_dir', '../dino_data/output_dino',
-          '--finetune_type', '0',
-          '--maskd', 'True',
-          '--train_mode', 'finetune',
-            ])
-
-
-    train_finetune(args)
+    # 7折交叉验证
+    for i in range(7):
+        print(f"Starting finetune fold {i+1}...")
+        args = parser.parse_args([
+            '--train_data_path', f'../dino_data/dino_sequence_data/finetune_fold{i}_train_.pt',
+            '--val_data_path', f'../dino_data/dino_sequence_data/finetune_fold{i}_val.pt',
+            '--pretrained_weights', '../dino_data/output_dino/pretrain_maskd/weights/student_epoch100.pth',
+            '--output_dir', '../dino_data/output_dino',
+            '--finetune_type', '0',
+            '--maskd', 'True',
+            '--train_mode', 'finetune',
+        ])
+        train_finetune(args)
+    print("All folds finetuned successfully!")

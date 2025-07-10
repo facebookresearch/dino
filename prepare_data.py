@@ -2,7 +2,8 @@ import json
 import torch
 import random
 from pathlib import Path
-from sklearn.model_selection import train_test_split
+import math
+
 from tqdm import tqdm
 from parameter import IGN_LEN, TEACHER_TOKEN_LIMIT, VAL_IDS
 
@@ -110,32 +111,76 @@ remaining = [s for s in sequences if s['person_id'] not in VAL_IDS]
 
 # 用 (person_id, exp_id) 作为唯一 ID
 unique_ids = list(set((s['person_id'], s['exp_id']) for s in remaining))
-random.shuffle(unique_ids)
+rng = random.Random(42)
+rng.shuffle(unique_ids)
+
 split_idx = int(len(unique_ids) * 0.7)
 pretrain_ids = set(unique_ids[:split_idx])
 finetune_train_ids = set(unique_ids[split_idx:])
 
 pretrain = [s for s in remaining if (s['person_id'], s['exp_id']) in pretrain_ids]
+
+print(f"预训练集样本数: {len(pretrain)}")
+print(f"微调测试集样本数: {len(finetune_test)}")
+torch.save(pretrain, OUTPUT_DIR / "pretrain.pt")
+torch.save(finetune_test, OUTPUT_DIR / "finetune_test.pt")
+print("预训练和测试集保存完毕 ✔️")
+
 finetune_train = [s for s in remaining if (s['person_id'], s['exp_id']) in finetune_train_ids]
 
-# 把短数据（非测试集的）都作为微调训练集
+# 把短数据（非测试集的）都作为微调数据集
 finetune_train += [s for s in sequences_finetune_2 if s['person_id'] not in VAL_IDS]
 
-# 从微调训练集中分出 15% 作为验证集
-random.shuffle(finetune_train)
-split_idx_val = int(len(finetune_train) * 0.75)
-finetune_val = finetune_train[split_idx_val:]
-finetune_train = finetune_train[:split_idx_val]
+# # 从微调训练集中分出 15% 作为验证集
+# random.shuffle(finetune_train，seed=42)
+# split_idx_val = int(len(finetune_train) * 0.75)
+# finetune_val = finetune_train[split_idx_val:]
+# finetune_train = finetune_train[:split_idx_val]
 
-# ==== 保存数据 ====
-torch.save(pretrain, OUTPUT_DIR / "pretrain.pt")
-torch.save(finetune_train, OUTPUT_DIR / "finetune_train.pt")
-torch.save(finetune_val, OUTPUT_DIR / "finetune_val.pt")
-torch.save(finetune_test, OUTPUT_DIR / "finetune_test.pt")
+# ---------- 1. 收集所有可用于微调的数据 ----------
+print("可用于 7-fold 的微调样本数:", len(finetune_train))
 
-# ==== 打印信息 ====
+
+# ---------- 2. 构造分组标签 ----------
+groups = [ (s['person_id'], s['exp_id']) for s in finetune_train ]
+unique_groups =  list(set(groups))
+
+print("唯一 group 数:", len(unique_groups))
+
+rng.shuffle(unique_groups)
+
+n_folds = 7
+group_per_fold = math.ceil(len(unique_groups) / n_folds)
+
+fold_groups = [
+    unique_groups[i * group_per_fold : (i + 1) * group_per_fold]
+    for i in range(n_folds)
+]
+
+# ------------ 3) 逐折筛索引并保存 ----------------
+for fold_id, val_groups in enumerate(fold_groups):
+    val_set_groups = set(val_groups)            # 提前转 set 加速查找
+
+    # val_idx = 组别 ∈ val_set_groups 的样本下标
+    val_idx = [
+        idx for idx, g in enumerate(groups)
+        if g in val_set_groups
+    ]
+
+    # train_idx = 组别 ∉ val_set_groups 的下标
+    train_idx = [
+        idx for idx, g in enumerate(groups)
+        if g not in val_set_groups
+    ]
+
+    # 根据下标拿到样本
+    train_set = [finetune_train[i] for i in train_idx]
+    val_set   = [finetune_train[i] for i in val_idx]
+
+    torch.save(train_set, OUTPUT_DIR / f"finetune_fold{fold_id}_train.pt")
+    torch.save(val_set,   OUTPUT_DIR / f"finetune_fold{fold_id}_val.pt")
+
+    print(f"Fold {fold_id}: train = {len(train_set)}, val = {len(val_set)}")
+
+print("5-fold 微调数据保存完毕 ✔️")
 print("数据处理完成")
-print(f"预训练集样本数: {len(pretrain)}")
-print(f"微调训练集样本数: {len(finetune_train)}")
-print(f"微调验证集样本数: {len(finetune_val)}")
-print(f"微调测试集样本数: {len(finetune_test)}")
