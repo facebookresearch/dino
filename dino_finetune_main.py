@@ -326,6 +326,7 @@ if __name__ == "__main__":
             '--finetune_type', '0',
             '--maskd',
             '--train_mode', 'finetune',
+            '--epochs', '50',
         ])
         train_finetune(args)
     print("All folds finetuned successfully!")
