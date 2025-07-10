@@ -67,6 +67,19 @@ def extract_cls(args):
 
     print(f"✅ Saved CLS features to {output_path}")
 
+    # 生成一个新的cls字典，key是 person_id，value是一个列表，包含所有该person_id的cls
+    cls_data = {}
+    for entry in all_cls:
+        person_id = entry["person_id"]
+        if person_id not in cls_data:
+            cls_data[person_id] = []
+        cls_data[person_id].append(entry["cls"])
+    # 保存新的cls字典
+    cls_output_path = Path(args.output_path) / "cls_by_person.pkl"
+    with open(cls_output_path, "wb") as f:
+        pickle.dump(cls_data, f)
+    print(f"✅ Saved CLS data by person to {cls_output_path}")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_path", type=str, required=True, help="Path to pretrain.pt")
@@ -76,7 +89,7 @@ if __name__ == "__main__":
     parser.add_argument("--maskd", type=bool, default=False)
     args = parser.parse_args([
     '--data_path', "../dino_data/dino_sequence_data/pretrain.pt",
-    '--pretrained_weights', '../dino_data/weights/20:100epoch pretrain/student_epoch20.pth',
+    '--weights_path', '../dino_data/weights/20:100epoch pretrain/student_epoch20.pth',
     '--output_path', '../dino_data/output_dino',
     '--batch_size', '32',
     '--maskd', 'True'

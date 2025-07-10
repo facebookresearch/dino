@@ -301,7 +301,7 @@ if __name__ == "__main__":
     parser.add_argument('--train_mode', type=str, choices=['linear', 'finetune'], default='finetune',
                         help="Training mode: linear (linear probing) or finetune (full fine-tuning)")
     parser.add_argument('--finetune_type', type=int, default=0, choices=[0, 1,2,3]) # 0: 全局 cls, 1: 最后几个 A/S
-    parser.add_argument("--maskd", type=bool, default=False)
+    parser.add_argument("--maskd", action="store_true", help="Enable D masking.")
 
 
     # args = parser.parse_args([
@@ -320,7 +320,7 @@ if __name__ == "__main__":
             '--pretrained_weights', '../dino_data/output_dino/pretrain_maskd/weights/student_epoch100.pth',
             '--output_dir', '../dino_data/output_dino',
             '--finetune_type', '0',
-            '--maskd', 'True',
+            '--maskd',
             '--train_mode', 'finetune',
         ])
         train_finetune(args)

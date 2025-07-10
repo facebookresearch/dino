@@ -167,7 +167,10 @@ def my_collate_fn(batch):
         "t_s_idx_batch": t_s_idx_batch,
         "t_d_idx_batch": t_d_idx_batch,
         "student_mask": torch.stack([item['student_mask'] for item in batch]),
-        "teacher_mask": torch.stack([item['teacher_mask'] for item in batch])
+        "teacher_mask": torch.stack([item['teacher_mask'] for item in batch]),
+        "person_id": [item['person_id'] for item in batch],
+        "exp_id": [item['exp_id'] for item in batch],
+        "ts": [item['ts'] for item in batch],
     }
 def cosine_fpd_loss(stu_out: torch.Tensor,
                     tea_out: torch.Tensor) -> torch.Tensor:
@@ -450,8 +453,8 @@ if __name__ == "__main__":
     parser.add_argument('--warmup_teacher_temp', default=0.04, type=float, help="Initial value for the teacher temperature.")
     parser.add_argument('--teacher_temp', default=0.07, type=float, help="Final value (after linear warmup) of the teacher temperature.")
     parser.add_argument('--warmup_teacher_temp_epochs', default=30, type=int, help="Number of warmup epochs for the teacher temperature.")
-    parser.add_argument("--maskd", type=bool, default=False)
-    parser.add_argument("--maskas", type=bool, default=False)
+    parser.add_argument("--maskd", action="store_true", help="Enable D masking.")
+    parser.add_argument("--maskas", action="store_true", help="Enable A/S masking.")
     parser.add_argument("--mask_as_ratio", type=float, default=0.3, help="Mask A/S ratio for maskas")
 
     args = parser.parse_args([
@@ -466,8 +469,8 @@ if __name__ == "__main__":
         "--warmup_teacher_temp", "0.08",
         "--teacher_temp", "0.10",
         "--warmup_teacher_temp_epochs", "25",
-        '--maskd', 'True',
-        # '--maskas', 'True',
+        '--maskd',
+        # '--maskas',
         '--mask_as_ratio', '0.3',
     ])
     train_dino(args)

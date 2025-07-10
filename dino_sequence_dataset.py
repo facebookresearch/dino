@@ -73,7 +73,7 @@ class DinoSequenceDataset(Dataset):
         # print(f"[Processing] Sample {idx}")
         token_seq = item['seq']
         person_id = item['person_id']
-        exp_id = item['exp_id']
+        exp_id = item['exp_id'].split('-')[1]  # 提取实验 ID 的后缀
         ts = item['ts']
 
         max_tokens = self.max_teacher_tokens if self.mode != 'finetune' else self.max_student_tokens
