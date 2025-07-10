@@ -145,8 +145,6 @@ print("可用于 7-fold 的微调样本数:", len(finetune_train))
 groups = [ (s['person_id'], s['exp_id']) for s in finetune_train ]
 unique_groups =  list(set(groups))
 
-print("唯一 group 数:", len(unique_groups))
-
 rng.shuffle(unique_groups)
 
 n_folds = 7
