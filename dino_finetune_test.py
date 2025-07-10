@@ -7,10 +7,44 @@ import pandas as pd
 from tqdm import tqdm
 from datetime import datetime
 import seaborn as sns
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 from dino_sequence_dataset import DinoSequenceDataset  
 from sequence_transformer import ASDTransformer  
 from dino_finetune_main import my_collate_fn 
+
+def plt_confusion_matrix(all_targets, all_preds, figures_dir):
+    # ------------- 定义标签顺序 ----------------
+    # 保证顺序与 model 输出 / all_targets 的整数 id 完全一致！
+    labels = ["passive", "backward", "synchronized", "forward"]
+
+    # ------------- 计数字矩阵 ----------------
+    cm = confusion_matrix(all_targets, all_preds, labels=range(len(labels)))
+
+    plt.figure(figsize=(6, 5))
+    sns.heatmap(cm,
+                annot=True, fmt='d', cmap='Blues',
+                xticklabels=labels, yticklabels=labels)
+    plt.title("Confusion Matrix")
+    plt.xlabel('Prediction');  plt.ylabel('Ground Truth')
+    plt.tight_layout()
+    plt.savefig(figures_dir / f"confusion_matrix.png")
+    plt.close()
+
+    # ------------- 百分比矩阵 ----------------
+    cm_perc = cm / (cm.sum(axis=1, keepdims=True) + 1e-9)   # 行归一化
+    plt.figure(figsize=(6, 5))
+    sns.heatmap(cm_perc * 100,
+                annot=True, fmt='.1f', cmap='Greens',
+                xticklabels=labels, yticklabels=labels,
+                cbar_kws={'label': 'Percentage (%)'})
+    plt.title("Confusion Matrix")
+    plt.xlabel('Prediction');  plt.ylabel('Ground Truth')
+    plt.tight_layout()
+    plt.savefig(figures_dir / f"confusion_matrix_norm.png")
+    plt.close()
+
+
 
 def test_model(model, test_loader, device, criterion_decision, criterion_action):
     model.eval()
@@ -101,26 +135,8 @@ def main(args):
     plt.savefig(figures_dir / "test_bar_metrics.png")
     plt.close()
 
-    from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
-    cm = confusion_matrix(y_true, y_pred)
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-    disp.plot(cmap='Blues')
-    plt.title("Test Confusion Matrix")
-    plt.xlabel('Prediction')
-    plt.ylabel('Groundtruth')
-    plt.savefig(figures_dir / "test_confusion_matrix.png")
-    plt.close()
-    cm_perc = cm / (cm.sum(axis=1, keepdims=True) + 1e-9)
-    plt.figure(figsize=(6, 5))
-    sns.heatmap(cm_perc * 100,  # 乘 100 直接显示百分比
-                annot=True, fmt='.1f', cmap='Greens',
-                cbar_kws={'label': 'Percentage (%)'})
-    plt.title("Confusion Matrix")
-    plt.xlabel('Prediction')
-    plt.ylabel('Groundtruth')
-    plt.tight_layout()
-    plt.savefig(figures_dir / f"confusion_matrix_norm.png")
-    plt.close()
+
+
     
 
 

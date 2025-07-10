@@ -40,6 +40,38 @@ def my_collate_fn(batch):
         "target_a": torch.stack([item['target_a_tensor'] for item in batch]),
     }
 
+def plot_confusion_matrix(all_targets, all_preds, epoch, figures_dir):
+    # ------------- 定义标签顺序 ----------------
+    # 保证顺序与 model 输出 / all_targets 的整数 id 完全一致！
+    labels = ["passive", "backward", "synchronized", "forward"]
+
+    # ------------- 计数字矩阵 ----------------
+    cm = confusion_matrix(all_targets, all_preds, labels=range(len(labels)))
+
+    plt.figure(figsize=(6, 5))
+    sns.heatmap(cm,
+                annot=True, fmt='d', cmap='Blues',
+                xticklabels=labels, yticklabels=labels)
+    plt.title("Confusion Matrix")
+    plt.xlabel('Predicted');  plt.ylabel('True')
+    plt.tight_layout()
+    plt.savefig(figures_dir / f"confusion_matrix_epoch{epoch+1}.png")
+    plt.close()
+
+    # ------------- 百分比矩阵 ----------------
+    cm_perc = cm / (cm.sum(axis=1, keepdims=True) + 1e-9)   # 行归一化
+    plt.figure(figsize=(6, 5))
+    sns.heatmap(cm_perc * 100,
+                annot=True, fmt='.1f', cmap='Greens',
+                xticklabels=labels, yticklabels=labels,
+                cbar_kws={'label': 'Percentage (%)'})
+    plt.title("Confusion Matrix")
+    plt.xlabel('Predicted');  plt.ylabel('True')
+    plt.tight_layout()
+    plt.savefig(figures_dir / f"confusion_matrix_norm_epoch{epoch+1}.png")
+    plt.close()
+
+
 def train_finetune(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -165,26 +197,7 @@ def train_finetune(args):
             history[phase]["mae"].append(avg_mae)
 
             if phase == "val":
-
-                cm = confusion_matrix(all_targets, all_preds)
-                plt.figure(figsize=(6,5))
-                sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
-                plt.title(f"Confusion Matrix")
-                plt.xlabel('Prediction')
-                plt.ylabel('Groundtruth')
-                plt.savefig(figures_dir / f"confusion_matrix_epoch{epoch+1}.png")
-                plt.close()
-                cm_perc = cm / (cm.sum(axis=1, keepdims=True) + 1e-9)
-                plt.figure(figsize=(6, 5))
-                sns.heatmap(cm_perc * 100,  # 乘 100 直接显示百分比
-                            annot=True, fmt='.1f', cmap='Greens',
-                            cbar_kws={'label': 'Percentage (%)'})
-                plt.title("Confusion Matrix")
-                plt.xlabel('Prediction')
-                plt.ylabel('Groundtruth')
-                plt.tight_layout()
-                plt.savefig(figures_dir / f"confusion_matrix_norm_epoch{epoch+1}.png")
-                plt.close()
+                plot_confusion_matrix(all_targets, all_preds, epoch, figures_dir)
                 ckpt_path = weights_dir / f"student_finetune_epoch{epoch+1}.pth"
                 torch.save(student.state_dict(), ckpt_path)
 
