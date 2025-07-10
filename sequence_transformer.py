@@ -69,41 +69,30 @@ class ASDTransformer(nn.Module):
             nn.LayerNorm(embed_dim*4),
             nn.Linear(embed_dim*4, 1)  # 回归
         )
-    def mask_pair_as(self,mask: torch.Tensor,
-                                a_idx: torch.Tensor,
-                                s_idx: torch.Tensor,
-                                ratio: float) -> torch.Tensor:
-        """
-        对每条序列单独计算可见 A/S 对数，随机遮掉相同比例（向下取整）。
+    def mask_pair_as(self,
+                    mask: torch.Tensor,      # (B, T)
+                    a_idx: torch.Tensor,     # (N,) or (N,2)
+                    s_idx: torch.Tensor,     # (N,) or (N,2)
+                    ratio: float) -> torch.Tensor:
 
-        mask   (B, T)  bool  True=可见
-        a_idx  (N, 2)  long  A token 索引 [batch, col]
-        s_idx  (N, 2)  long  S token 索引 [batch, col]
-        ratio  float   遮盖比例 0~1
-        """
-        assert a_idx.size(0) == s_idx.size(0), "A、S 数量需一致"
+        B, T = mask.shape
+        assert a_idx.shape == s_idx.shape
+        L = a_idx.size(1)
 
-        # 当前仍可见且成对存在
-        keep = mask[a_idx[:,0], a_idx[:,1]] & mask[s_idx[:,0], s_idx[:,1]]
-        a_idx, s_idx = a_idx[keep], s_idx[keep]
+        for b in range(B):
+            cols_a = a_idx[b]                # (L,)
+            cols_s = s_idx[b]
+            valid   = mask[b, cols_a] & mask[b, cols_s]   # 仍可见的成对位置
+            cols_a, cols_s = cols_a[valid], cols_s[valid]
 
-        # ---- 按序列逐条处理 ----
-        for b in torch.unique(a_idx[:,0]):
-            sel = (a_idx[:,0] == b)             # 属于该 batch 的行
-            n_pairs = sel.sum().item()
-            if n_pairs == 0:
-                continue
-            k = int(n_pairs * ratio)            # 固定要遮掉多少对
-            if k == 0:
-                continue
-            rand = torch.randperm(n_pairs, device=mask.device)[:k]
-            rows_a, cols_a = a_idx[sel][rand].T
-            rows_s, cols_s = s_idx[sel][rand].T
-            mask[rows_a, cols_a] = False
-            mask[rows_s, cols_s] = False
+            k = int(cols_a.numel() * ratio)               # 要遮多少对
+            if k:
+                rand = torch.randperm(cols_a.numel(), device=mask.device)[:k]
+                mask[b, cols_a[rand]] = False
+                mask[b, cols_s[rand]] = False
         return mask
     
-    def forward(self, a_tensor,s_tensor, d_tensor, a_idx, s_idx, d_idx, mask, finetune_type=0,mask_d=False,mask_as=False,mask_as_ratio=0.3):
+    def forward(self, a_tensor,s_tensor, d_tensor, a_idx, s_idx, d_idx, mask,a_idx_batch,s_idx_batch,d_idx_batch, finetune_type=0,mask_d=False,mask_as=False,mask_as_ratio=0.3):
         """
         Args:
             a_tensor: (total_A, 1)
@@ -159,11 +148,11 @@ class ASDTransformer(nn.Module):
 
         # 1) 把 D 都关掉
         if mask_d and d_idx.numel():
-            mask[d_idx[:,0], d_idx[:,1]] = False
+            mask[d_idx_batch[:,0], d_idx_batch[:,1]] = False
 
         # 2) 成对遮 A/S
         if mask_as and a_idx.numel() and s_idx.numel():
-            mask = self.mask_pair_as(mask, a_idx, s_idx, mask_as_ratio)
+            mask = self.mask_pair_as(mask, a_idx_batch, s_idx_batch, mask_as_ratio)
 
         full_mask = torch.cat((cls_mask, ~mask), dim=1)
 

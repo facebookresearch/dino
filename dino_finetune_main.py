@@ -18,13 +18,23 @@ from dino_sequence_dataset import DinoSequenceDataset
 from utils import clip_gradients
 
 def my_collate_fn(batch):
+    batch_num = len(batch)
+    s_a_idx= torch.tensor(batch[0]["student_type_idx"]["A_idx"], dtype=torch.long)
+    s_s_idx= torch.tensor(batch[0]["student_type_idx"]["S_idx"], dtype=torch.long)
+    s_d_idx= torch.tensor(batch[0]["student_type_idx"]["D_idx"], dtype=torch.long)
+    s_a_idx_batch = torch.stack([s_a_idx for i in range(batch_num)]).long()
+    s_s_idx_batch = torch.stack([s_s_idx for i in range(batch_num)]).long()
+    s_d_idx_batch = torch.stack([s_d_idx for i in range(batch_num)]).long()
     return {
         "s_a": torch.stack([item['student_a_tensor'] for item in batch]),
         "s_s": torch.stack([item['student_s_tensor'] for item in batch]), 
         "s_d": torch.stack([item['student_d_tensor'] for item in batch]),  
-        "s_a_idx": torch.tensor(batch[0]["student_type_idx"]["A_idx"], dtype=torch.long),
-        "s_s_idx": torch.tensor(batch[0]["student_type_idx"]["S_idx"], dtype=torch.long),
-        "s_d_idx": torch.tensor(batch[0]["student_type_idx"]["D_idx"], dtype=torch.long),
+        "s_a_idx": s_a_idx,
+        "s_s_idx": s_s_idx,
+        "s_d_idx": s_d_idx,
+        "s_a_idx_batch": s_a_idx_batch,
+        "s_s_idx_batch": s_s_idx_batch,
+        "s_d_idx_batch": s_d_idx_batch,
         "student_mask": torch.stack([item['student_mask'] for item in batch]),
         "target_d": torch.stack([item['target_d_tensor'] for item in batch]),
         "target_a": torch.stack([item['target_a_tensor'] for item in batch]),
@@ -106,12 +116,21 @@ def train_finetune(args):
                 s_s_idx = batch['s_s_idx'].to(device)
                 s_d_idx = batch['s_d_idx'].to(device)
 
+                s_a_idx_batch = batch['s_a_idx_batch'].to(device)
+                s_s_idx_batch = batch['s_s_idx_batch'].to(device)
+                s_d_idx_batch = batch['s_d_idx_batch'].to(device)
+
                 student_mask = batch['student_mask'].to(device).bool()
                 target_d = batch['target_d'].to(device)
                 target_a = batch['target_a'].to(device).float()
 
                 with torch.set_grad_enabled(phase == "train"):
-                    d_out, a_out = student(s_a, s_s, s_d, s_a_idx, s_s_idx, s_d_idx, student_mask,mask_d=args.maskd, finetune_type=args.finetune_type)
+                    d_out, a_out = student(s_a, s_s, s_d,
+                                            s_a_idx, s_s_idx, s_d_idx, 
+                                            student_mask,
+                                            s_a_idx_batch, s_s_idx_batch, s_d_idx_batch,
+                                            mask_d=args.maskd, 
+                                            finetune_type=args.finetune_type)
                     # === 主任务 loss ===
                     loss_decision = ce_loss_fn(d_out, target_d.squeeze(-1).long())
                     loss_action = mse_loss_fn(a_out, target_a)
@@ -247,7 +266,7 @@ if __name__ == "__main__":
     parser.add_argument('--train_mode', type=str, choices=['linear', 'finetune'], default='finetune',
                         help="Training mode: linear (linear probing) or finetune (full fine-tuning)")
     parser.add_argument('--finetune_type', type=int, default=0, choices=[0, 1,2,3]) # 0: 全局 cls, 1: 最后几个 A/S
-    parser.add_argument("--maskd", type=float, default=False)
+    parser.add_argument("--maskd", type=bool, default=False)
 
 
     # args = parser.parse_args([
@@ -261,11 +280,11 @@ if __name__ == "__main__":
     args = parser.parse_args([
         '--train_data_path', '../dino_data/dino_sequence_data/finetune_train.pt',
         '--val_data_path', '../dino_data/dino_sequence_data/finetune_val.pt',
-        '--pretrained_weights', '../dino_data/output_dino/pretrain_2.0/weights/student_epoch100.pth',
+        '--pretrained_weights', '../dino_data/output_dino/pretrain_maskd/weights/student_epoch100.pth',
           '--output_dir', '../dino_data/output_dino',
           '--finetune_type', '0',
-          '--maskd', 'False',
-        #   '--train_mode', 'linear',
+          '--maskd', 'True',
+          '--train_mode', 'finetune',
             ])
 
 

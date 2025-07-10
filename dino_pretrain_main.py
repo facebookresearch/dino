@@ -2,7 +2,7 @@ import os
 import csv
 import time
 import argparse
-from datetime import datetime
+from datetime import datetime, timedelta
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -134,6 +134,19 @@ def clip_gradients(model, clip):
     return norms
 
 def my_collate_fn(batch):
+    batch_num = len(batch)
+    s_a_idx= torch.tensor(batch[0]["student_type_idx"]["A_idx"], dtype=torch.long)
+    s_s_idx= torch.tensor(batch[0]["student_type_idx"]["S_idx"], dtype=torch.long)
+    s_d_idx= torch.tensor(batch[0]["student_type_idx"]["D_idx"], dtype=torch.long)
+    t_a_idx= torch.tensor(batch[0]["teacher_type_idx"]["A_idx"], dtype=torch.long)
+    t_s_idx= torch.tensor(batch[0]["teacher_type_idx"]["S_idx"], dtype=torch.long)
+    t_d_idx= torch.tensor(batch[0]["teacher_type_idx"]["D_idx"], dtype=torch.long)
+    s_a_idx_batch = torch.stack([s_a_idx for i in range(batch_num)]).long()
+    s_s_idx_batch = torch.stack([s_s_idx for i in range(batch_num)]).long()
+    s_d_idx_batch = torch.stack([s_d_idx for i in range(batch_num)]).long()
+    t_a_idx_batch = torch.stack([t_a_idx for i in range(batch_num)]).long()
+    t_s_idx_batch = torch.stack([t_s_idx for i in range(batch_num)]).long()
+    t_d_idx_batch = torch.stack([t_d_idx for i in range(batch_num)]).long()
     return {
         "s_a": torch.stack([item['student_a_tensor'] for item in batch]),
         "s_s": torch.stack([item['student_s_tensor'] for item in batch]), 
@@ -141,12 +154,18 @@ def my_collate_fn(batch):
         "t_a": torch.stack([item['teacher_a_tensor'] for item in batch]) ,
         "t_s": torch.stack([item['teacher_s_tensor'] for item in batch]) ,
         "t_d": torch.stack([item['teacher_d_tensor'] for item in batch]) ,
-        "s_a_idx": torch.tensor(batch[0]["student_type_idx"]["A_idx"], dtype=torch.long),
-        "s_s_idx": torch.tensor(batch[0]["student_type_idx"]["S_idx"], dtype=torch.long),
-        "s_d_idx": torch.tensor(batch[0]["student_type_idx"]["D_idx"], dtype=torch.long),
-        "t_a_idx": torch.tensor(batch[0]["teacher_type_idx"]["A_idx"], dtype=torch.long) ,
-        "t_s_idx": torch.tensor(batch[0]["teacher_type_idx"]["S_idx"], dtype=torch.long) ,
-        "t_d_idx": torch.tensor(batch[0]["teacher_type_idx"]["D_idx"], dtype=torch.long) ,
+        "s_a_idx": s_a_idx,
+        "s_s_idx": s_s_idx,
+        "s_d_idx": s_d_idx,
+        "t_a_idx": t_a_idx,
+        "t_s_idx": t_s_idx,
+        "t_d_idx": t_d_idx,
+        "s_a_idx_batch": s_a_idx_batch,
+        "s_s_idx_batch": s_s_idx_batch,
+        "s_d_idx_batch": s_d_idx_batch,
+        "t_a_idx_batch": t_a_idx_batch,
+        "t_s_idx_batch": t_s_idx_batch,
+        "t_d_idx_batch": t_d_idx_batch,
         "student_mask": torch.stack([item['student_mask'] for item in batch]),
         "teacher_mask": torch.stack([item['teacher_mask'] for item in batch])
     }
@@ -292,19 +311,34 @@ def train_dino(args):
             t_s_idx = batch['t_s_idx'].to(device) 
             t_d_idx = batch['t_d_idx'].to(device) 
 
+            s_a_idx_batch = batch['s_a_idx_batch'].to(device)
+            s_s_idx_batch = batch['s_s_idx_batch'].to(device)
+            s_d_idx_batch = batch['s_d_idx_batch'].to(device)
+
+            t_a_idx_batch = batch['t_a_idx_batch'].to(device)
+            t_s_idx_batch = batch['t_s_idx_batch'].to(device)
+            t_d_idx_batch = batch['t_d_idx_batch'].to(device)
+
             student_mask = batch['student_mask'].to(device).bool()
             teacher_mask = batch['teacher_mask'].to(device).bool()
 
 
-            s_out = student(s_a, s_s, s_d, s_a_idx, s_s_idx, s_d_idx, student_mask,mask_d=args.maskd)
-            t_out = teacher(t_a, t_s, t_d, t_a_idx, t_s_idx, t_d_idx, teacher_mask,mask_as=args.maskas,mask_as_ratio=args.mask_as_ratio)
-            if args.maskd:
-            # print("s_out:", s_out.shape, "t_out:", t_out.shape)
-                dinoloss = dino_loss(s_out, t_out, epoch)
-                vicreg_loss = vicreg_loss_fn(s_out, t_out)
-                loss = dinoloss + vicreg_loss*0
-            else:
-                loss  = cosine_fpd_loss(s_out, t_out)
+            s_out = student(s_a, s_s, s_d,
+                             s_a_idx, s_s_idx, s_d_idx, 
+                             student_mask,
+                             s_a_idx_batch, s_s_idx_batch, s_d_idx_batch,
+                             mask_d=args.maskd)
+            t_out = teacher(t_a, t_s, t_d, 
+                            t_a_idx, t_s_idx, t_d_idx, 
+                            teacher_mask,
+                            t_a_idx_batch, t_s_idx_batch, t_d_idx_batch,
+                            mask_as=args.maskas,mask_as_ratio=args.mask_as_ratio)
+            # if args.maskd:
+            #     dinoloss = dino_loss(s_out, t_out, epoch)
+            #     vicreg_loss = vicreg_loss_fn(s_out, t_out)
+            #     loss = dinoloss + vicreg_loss*0
+            # else:
+            loss  = cosine_fpd_loss(s_out, t_out)
             student_var = s_out.var(dim=1).mean().item()  # [B, D] → scalar
             teacher_var = t_out.var(dim=1).mean().item()
             student_variances.append(student_var)
@@ -395,9 +429,8 @@ def train_dino(args):
         plt.savefig(figures_dir / f"variance_in_epoch_{epoch+1}.png")
         plt.close()
 
-    total_time = str(datetime.timedelta(seconds=int(time.time() - start_time)))
+    total_time = str(timedelta(seconds=int(time.time() - start_time)))
     print("\nTraining complete in:", total_time)
-    writer.close()
 
 
 # ============ 主函数入口 ============
@@ -417,8 +450,8 @@ if __name__ == "__main__":
     parser.add_argument('--warmup_teacher_temp', default=0.04, type=float, help="Initial value for the teacher temperature.")
     parser.add_argument('--teacher_temp', default=0.07, type=float, help="Final value (after linear warmup) of the teacher temperature.")
     parser.add_argument('--warmup_teacher_temp_epochs', default=30, type=int, help="Number of warmup epochs for the teacher temperature.")
-    parser.add_argument("--maskd", type=float, default=False)
-    parser.add_argument("--maskas", type=float, default=False)
+    parser.add_argument("--maskd", type=bool, default=False)
+    parser.add_argument("--maskas", type=bool, default=False)
     parser.add_argument("--mask_as_ratio", type=float, default=0.3, help="Mask A/S ratio for maskas")
 
     args = parser.parse_args([
@@ -429,12 +462,12 @@ if __name__ == "__main__":
         "--lr", "1e-4",
         "--out_dim", "256",
         "--save_interval", "10",
-        "--momentum_teacher", "0.996",
+        "--momentum_teacher", "0.9996",
         "--warmup_teacher_temp", "0.08",
         "--teacher_temp", "0.10",
         "--warmup_teacher_temp_epochs", "25",
         '--maskd', 'True',
-        '--maskas', 'True',
+        # '--maskas', 'True',
         '--mask_as_ratio', '0.3',
     ])
     train_dino(args)
