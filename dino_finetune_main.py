@@ -318,7 +318,7 @@ if __name__ == "__main__":
     for i in range(7):
         print(f"Starting finetune fold {i+1}...")
         args = parser.parse_args([
-            '--train_data_path', f'../dino_data/dino_sequence_data/finetune_fold{i}_train_.pt',
+            '--train_data_path', f'../dino_data/dino_sequence_data/finetune_fold{i}_train.pt',
             '--val_data_path', f'../dino_data/dino_sequence_data/finetune_fold{i}_val.pt',
             '--pretrained_weights', '../dino_data/output_dino/pretrain_maskd/weights/student_epoch100.pth',
             '--output_dir', '../dino_data/output_dino',
