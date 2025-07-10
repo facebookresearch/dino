@@ -15,7 +15,18 @@ import seaborn as sns
 
 from sequence_transformer import ASDTransformer
 from dino_sequence_dataset import DinoSequenceDataset
-from utils import clip_gradients
+
+def clip_gradients(model, clip):
+    norms = []
+    for name, p in model.named_parameters():
+        if p.grad is not None:
+            param_norm = p.grad.data.norm(2)
+            norms.append(param_norm.item())
+            clip_coef = clip / (param_norm + 1e-6)
+            if clip_coef < 1:
+                p.grad.data.mul_(clip_coef)
+    return norms
+
 
 def my_collate_fn(batch):
     batch_num = len(batch)
@@ -53,7 +64,7 @@ def plot_confusion_matrix(all_targets, all_preds, epoch, figures_dir):
                 annot=True, fmt='d', cmap='Blues',
                 xticklabels=labels, yticklabels=labels)
     plt.title("Confusion Matrix")
-    plt.xlabel('Predicted');  plt.ylabel('True')
+    plt.xlabel('Prediction');  plt.ylabel('Ground Truth')
     plt.tight_layout()
     plt.savefig(figures_dir / f"confusion_matrix_epoch{epoch+1}.png")
     plt.close()
@@ -66,7 +77,7 @@ def plot_confusion_matrix(all_targets, all_preds, epoch, figures_dir):
                 xticklabels=labels, yticklabels=labels,
                 cbar_kws={'label': 'Percentage (%)'})
     plt.title("Confusion Matrix")
-    plt.xlabel('Predicted');  plt.ylabel('True')
+    plt.xlabel('Prediction');  plt.ylabel('Ground Truth')
     plt.tight_layout()
     plt.savefig(figures_dir / f"confusion_matrix_norm_epoch{epoch+1}.png")
     plt.close()
