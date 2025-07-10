@@ -35,9 +35,17 @@ def extract_cls(args):
             s_s_idx = batch['s_s_idx'].to(device)
             s_d_idx = batch['s_d_idx'].to(device)
 
+            s_a_idx_batch = batch['s_a_idx_batch'].to(device)
+            s_s_idx_batch = batch['s_s_idx_batch'].to(device)
+            s_d_idx_batch = batch['s_d_idx_batch'].to(device)
+
             student_mask = batch['student_mask'].to(device).bool()
 
-            cls_out = model(s_a, s_s, s_d, s_a_idx, s_s_idx, s_d_idx, student_mask)
+            cls_out = model(s_a, s_s, s_d,
+                             s_a_idx, s_s_idx, s_d_idx, 
+                             student_mask,
+                             s_a_idx_batch, s_s_idx_batch, s_d_idx_batch,
+                             mask_d=args.maskd)
             # 如果返回的是 dict 或 tuple，取 cls 部分
             if isinstance(cls_out, dict):
                 cls_out = cls_out['cls_output']
@@ -65,10 +73,13 @@ if __name__ == "__main__":
     parser.add_argument("--weights_path", type=str, required=True, help="Path to pretrained model weights")
     parser.add_argument("--output_path", type=str, required=True, help="Path to save extracted CLS (pkl)")
     parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--maskd", type=bool, default=False)
     args = parser.parse_args([
     '--data_path', "../dino_data/dino_sequence_data/pretrain.pt",
     '--pretrained_weights', '../dino_data/weights/20:100epoch pretrain/student_epoch20.pth',
     '--output_path', '../dino_data/output_dino',
+    '--batch_size', '32',
+    '--maskd', 'True'
     ])
 
     extract_cls(args)
