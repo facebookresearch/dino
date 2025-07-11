@@ -1,9 +1,11 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.nn.functional as F
 from torch.utils.data import DataLoader,random_split
 from torch.cuda.amp import GradScaler, autocast
 from pathlib import Path
+import numpy as np
 import time
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
@@ -15,6 +17,60 @@ import seaborn as sns
 
 from sequence_transformer import ASDTransformer
 from dino_sequence_dataset import DinoSequenceDataset
+
+# -----------------------------------------------------------
+# 1) Balanced Softmax  (Ren et al. NeurIPS 2020)
+#    logits_bs = logits + log(freq)
+# -----------------------------------------------------------
+class BalancedSoftmaxLoss(nn.Module):
+    def __init__(self, freq, reduction='mean'):
+        """
+        freq       1-D Tensor, shape (C,)  —— 训练集每类样本数
+        reduction  'mean' / 'sum' / 'none'
+        """
+        super().__init__()
+        self.register_buffer('log_freq', torch.log(freq))
+        self.reduction = reduction
+
+    def forward(self, logits, target):
+        logits_bs = logits + self.log_freq          # 平移 logits
+        return F.cross_entropy(logits_bs, target, reduction=self.reduction)
+
+# -----------------------------------------------------------
+# 2) Class-Balanced Focal Loss  (Cui et al. CVPR 2019)
+#    weight_cb = (1-β)/(1-β^{n_i})
+#    loss      = weight_cb * focal(pt)
+# -----------------------------------------------------------
+class ClassBalancedFocalLoss(nn.Module):
+    def __init__(self, freq, beta=0.9999, gamma=2.0, reduction='mean'):
+        """
+        freq   1-D Tensor, 每类样本数
+        beta   取 0.9~0.9999, 数据越多越接近 1
+        gamma  Focal Loss 的 γ
+        """
+        super().__init__()
+        effective_n = 1. - beta ** freq.float()
+        self.register_buffer('class_weight', (1. - beta) / effective_n)
+        self.gamma = gamma
+        self.reduction = reduction
+
+    def forward(self, logits, target):
+        # CE → pt
+        log_pt = F.log_softmax(logits, dim=-1)
+        pt = log_pt.exp()
+
+        # 挑出对应类别的 pt 和 class_weight
+        pt = pt.gather(1, target.view(-1, 1)).squeeze(1)      # (B,)
+        weight = self.class_weight[target]                    # (B,)
+
+        loss = -weight * (1 - pt) ** self.gamma * log_pt.gather(1, target.unsqueeze(1)).squeeze(1)
+        if self.reduction == 'mean':
+            return loss.mean()
+        elif self.reduction == 'sum':
+            return loss.sum()
+        return loss
+
+
 
 def clip_gradients(model, clip):
     norms = []
@@ -93,6 +149,11 @@ def train_finetune(args):
     train_dataset = DinoSequenceDataset(args.train_data_path)
     val_dataset = DinoSequenceDataset(args.val_data_path)
 
+    # 在加载数据之后、创建 DataLoader 之前做一次即可
+    all_labels = np.concatenate([ds['target_d_tensor'].numpy() for ds in train_dataset])
+    freq = torch.tensor(np.bincount(all_labels, minlength=4), dtype=torch.float)
+    print("class freq =", freq.tolist())   # 例如 [920, 310, 180, 90]
+
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0, collate_fn=my_collate_fn)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0, collate_fn=my_collate_fn)
 
@@ -140,8 +201,9 @@ def train_finetune(args):
     history = {"train":  { "d_loss":[], "a_loss":[], "acc":[], "mae":[], "f1":[], "precision":[], "recall":[]}, "val": { "d_loss":[], "a_loss":[], "acc":[], "mae":[], "f1":[], "precision":[], "recall":[]}}
 
 
-    ce_loss_fn = nn.CrossEntropyLoss()
-    mse_loss_fn = nn.MSELoss()
+    # ce_loss_fn = nn.CrossEntropyLoss()
+    ce_loss_fn = BalancedSoftmaxLoss(freq.to(device))
+    mse_loss_fn = nn.SmoothL1Loss()
 
     start_time = time.time()
     for epoch in range(args.epochs):
