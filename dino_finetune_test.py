@@ -154,11 +154,11 @@ if __name__ == "__main__":
         args = parser.parse_args(
             [
                 '--test_data_path', '../dino_data/dino_sequence_data/finetune_test.pt',
-                '--weight_path', f'../dino_data/output_dino/finetune_fold{i}/weights/student_finetune_epoch20.pth',
+                '--weight_path', f'../dino_data/output_dino/finetune_fold{i}/weights/student_finetune_epoch50.pth',
                 '--output_dir', '../dino_data/output_dino',
                 '--finetune_type', '0',
                 '--maskd',
                 '--train_mode', 'finetune',
             ]
         )
-    main(args)
+        main(args)
