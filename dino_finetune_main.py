@@ -4,6 +4,8 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader,random_split
 from torch.cuda.amp import GradScaler, autocast
+from torch.utils.data import DataLoader, WeightedRandomSampler
+
 from pathlib import Path
 import numpy as np
 import time
@@ -154,8 +156,21 @@ def train_finetune(args):
     freq = torch.tensor(np.bincount(all_labels, minlength=4), dtype=torch.float)
     print("class freq =", freq.tolist())   # 例如 [920, 310, 180, 90]
 
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0, collate_fn=my_collate_fn)
-    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0, collate_fn=my_collate_fn)
+    weights = 1. / freq.float()
+    sample_weights = weights[all_labels]              # 与样本一一对应
+    sampler = WeightedRandomSampler(
+        weights=sample_weights,
+        num_samples=len(train_dataset),   # 每 epoch 与原数据量相同
+        replacement=True                  # 可重复采样
+)
+
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, 
+                              shuffle=True, num_workers=0, 
+                              sampler=sampler,  # 使用加权采样器
+                              collate_fn=my_collate_fn)
+    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, 
+                            shuffle=False, num_workers=0, 
+                            collate_fn=my_collate_fn)
 
     student = ASDTransformer(mode="finetune").to(device)
     if args.pretrained_weights:
@@ -201,8 +216,8 @@ def train_finetune(args):
     history = {"train":  { "d_loss":[], "a_loss":[], "acc":[], "mae":[], "f1":[], "precision":[], "recall":[]}, "val": { "d_loss":[], "a_loss":[], "acc":[], "mae":[], "f1":[], "precision":[], "recall":[]}}
 
 
-    # ce_loss_fn = nn.CrossEntropyLoss()
-    ce_loss_fn = BalancedSoftmaxLoss(freq.to(device))
+    ce_loss_fn = nn.CrossEntropyLoss()
+    # ce_loss_fn = BalancedSoftmaxLoss(freq.to(device))
     mse_loss_fn = nn.SmoothL1Loss()
 
     start_time = time.time()
